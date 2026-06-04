@@ -12,7 +12,7 @@ import Mathlib.Algebra.Order.Round
 
 This module starts a QPE formalization on top of `duckki/quantum-computing-lean`.
 It focuses on the semantic core needed by QAE: an eigenstate of a unitary with
-phase `φ = y/M` is transformed by controlled powers into a Fourier-basis state,
+phase `φ = y/M` is transformed by controlled powers into a exact phase state,
 and an inverse QFT maps that state to the computational-basis state `|y⟩`.
 
 The library currently supplies matrices, vectors, tensor products, unitarity, and
@@ -64,19 +64,15 @@ def zeroIndex (m : ℕ) : Fin (M m) :=
 def uniformState (m : ℕ) : Vector (M m) :=
   fun _ _ => ((M m : ℝ)⁻¹.sqrt : ℂ)
 
-/-- The Fourier basis state with phase `y/M`. -/
-def fourierState (m : ℕ) (y : Fin (M m)) : Vector (M m) :=
-  fun k _ => ((M m : ℝ)⁻¹.sqrt : ℂ) * (Real.fourierChar (((k : ℕ) * (y : ℕ) : ℝ) / (M m : ℝ)) : ℂ)
-
 /-- The counting-register state after phase kickback for an arbitrary real phase.
-For exact phases `theta = y / M`, this specializes to `fourierState m y`. -/
+For exact phases `theta = y / M`, this is the Fourier basis state indexed by `y`. -/
 def phaseState (m : ℕ) (theta : ℝ) : Vector (M m) :=
   fun k _ => (((M m : ℝ).sqrt : ℂ)⁻¹) * (Real.fourierChar ((k : ℕ) * theta) : ℂ)
 
 /-- The forward QFT matrix on the `m`-qubit counting register.
 
 The convention is `|y⟩ ↦ 1 / sqrt(M) * Σ_k exp(2π i k y / M) |k⟩`, matching
-`fourierState`. -/
+`phaseState m (y / M)` at exact phases. -/
 def qftMatrix (m : ℕ) : Square (M m) :=
   fun row col => ((M m : ℝ)⁻¹.sqrt : ℂ) *
     (Real.fourierChar (((row : ℕ) * (col : ℕ) : ℝ) / (M m : ℝ)) : ℂ)
@@ -1135,12 +1131,6 @@ def controlledPowerMatrix {n : ℕ} (m : ℕ) (U : Square n) : Square (M m * n) 
     phaseState m theta k 0 = (((M m : ℝ).sqrt : ℂ)⁻¹) * (Real.fourierChar ((k : ℕ) * theta) : ℂ) := by
   rfl
 
-/-- The approximate-QPE amplitude is the inverse-QFT coefficient of the kicked-back phase state. -/
-theorem qpeApproxAmplitude_eq_sum (m : ℕ) (theta : ℝ) (y : Fin (M m)) :
-    qpeApproxAmplitude m theta y =
-      ∑ k : Fin (M m), inverseQFTMatrix m y k * phaseState m theta k 0 := by
-  rfl
-
 @[simp] theorem controlledPowerMatrix_apply_same {n : ℕ} (m : ℕ) (U : Square n)
     (k : Fin (M m)) (i j : Fin n) :
     controlledPowerMatrix m U (finProdFinEquiv (k, i)) (finProdFinEquiv (k, j)) =
@@ -1153,12 +1143,15 @@ theorem qpeApproxAmplitude_eq_sum (m : ℕ) (theta : ℝ) (y : Fin (M m)) :
   simp [controlledPowerMatrix, hkl]
 
 /-- The QFT matrix sends a computational-basis state to the corresponding
-Fourier state. -/
+exact phase state. -/
 theorem qftMatrix_mul_basisState (m : ℕ) (y : Fin (M m)) :
-    qftMatrix m ⬝ Vector.basis y = fourierState m y := by
+    qftMatrix m ⬝ Vector.basis y = phaseState m (((y : ℕ) : ℝ) / (M m : ℝ)) := by
   ext k col
   fin_cases col
-  simp [qftMatrix, Vector.basis, Vector.basis, Matrix.mul, _root_.Matrix.mul_apply, fourierState]
+  simp [qftMatrix, Vector.basis, Vector.basis, Matrix.mul, _root_.Matrix.mul_apply, phaseState]
+  left
+  congr 1
+  field_simp [show (M m : ℝ) ≠ 0 by exact_mod_cast (NeZero.ne (M m))]
 
 /-- Powers of a matrix preserve an eigenvector equation. -/
 theorem matrix_power_eigenvector {n : ℕ} {U : Square n} {ψ : Vector n} {lam : ℂ}
@@ -1247,170 +1240,6 @@ theorem controlledPowerMatrix_isUnitary {n : ℕ} (m : ℕ) {U : Square n}
   rw [Matrix.isUnitary_iff_adjoint_mul_self]
   exact controlledPowerMatrix_adjoint_mul_self hU
 
-/-- Exact phases are a special case of the arbitrary kicked-back phase state. -/
-theorem phaseState_eq_fourierState (m : ℕ) (y : Fin (M m)) :
-    phaseState m (((y : ℕ) : ℝ) / (M m : ℝ)) = fourierState m y := by
-  ext k col
-  fin_cases col
-  unfold phaseState fourierState
-  calc
-    (((M m : ℝ).sqrt : ℂ)⁻¹) * (Real.fourierChar (((k : ℕ) : ℝ) * (((y : ℕ) : ℝ) / (M m : ℝ))) : ℂ)
-        = (((M m : ℝ).sqrt : ℂ)⁻¹) * (Real.fourierChar ((((k : ℕ) * (y : ℕ) : ℝ) / (M m : ℝ))) : ℂ) := by
-          congr 1
-          field_simp [show (M m : ℝ) ≠ 0 by exact_mod_cast (NeZero.ne (M m))]
-    _ = ((M m : ℝ)⁻¹.sqrt : ℂ) * (Real.fourierChar ((((k : ℕ) * (y : ℕ) : ℝ) / (M m : ℝ))) : ℂ) := by
-          simp
-
-/-- Sum of a nontrivial `M`th root of unity over one full period.  This is the
-geometric-series orthogonality theorem underlying QFT unitarity. -/
-theorem phase_root_sum_fin_eq_zero (m : ℕ) (d : Fin (M m)) (hd : d ≠ 0) :
-    (∑ k : Fin (M m), (Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) = 0 := by
-  let ζ := (Real.fourierChar (1 / (M m : ℝ)) : ℂ)
-  have hζ : IsPrimitiveRoot ζ (M m) := by
-    dsimp [ζ]
-    rw [Real.fourierChar_apply]
-    convert Complex.isPrimitiveRoot_exp (M m) (NeZero.ne (M m)) using 1
-    norm_num
-    ring_nf
-  let z := (Real.fourierChar ((d : ℕ) / (M m : ℝ)) : ℂ)
-  have hzpow : z = ζ ^ (d : ℕ) := by
-    dsimp [z, ζ]
-    norm_cast
-    convert AddChar.map_nsmul_eq_pow Real.fourierChar (d : ℕ) (1 / (M m : ℝ)) using 1
-    simp [nsmul_eq_mul]
-    ring_nf
-  have hzN : z ^ (M m) = 1 := by
-    rw [hzpow, ← pow_mul, mul_comm, pow_mul, hζ.pow_eq_one, one_pow]
-  have hzne : z ≠ 1 := by
-    intro h1
-    have hdiv : (M m) ∣ (d : ℕ) := by
-      rw [← hζ.pow_eq_one_iff_dvd]
-      rw [← hzpow]
-      exact h1
-    have hlt : (d : ℕ) < M m := d.isLt
-    have hzero : (d : ℕ) = 0 := Nat.eq_zero_of_dvd_of_lt hdiv hlt
-    exact hd (Fin.ext hzero)
-  calc
-    (∑ k : Fin (M m), (Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ))
-        = ∑ k : Fin (M m), z ^ (k : ℕ) := by
-          apply Finset.sum_congr rfl
-          intro k hk
-          dsimp [z]
-          rw [show (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) =
-              ((k : ℕ) : ℝ) * (((d : ℕ) : ℝ) / (M m : ℝ)) by
-            field_simp [show (M m : ℝ) ≠ 0 by exact_mod_cast (NeZero.ne (M m))]]
-          rw [show (Real.fourierChar (((k : ℕ) : ℝ) * (((d : ℕ) : ℝ) / (M m : ℝ))) : ℂ) =
-              (Real.fourierChar (((d : ℕ) : ℝ) / (M m : ℝ)) : ℂ) ^ (k : ℕ) by
-            rw [← nsmul_eq_mul]
-            norm_cast
-            exact AddChar.map_nsmul_eq_pow Real.fourierChar (k : ℕ) (((d : ℕ) : ℝ) / (M m : ℝ))]
-    _ = ∑ i ∈ Finset.range (M m), z ^ i := by
-          exact (Finset.sum_range (fun i => z ^ i)).symm
-    _ = 0 := by
-          rw [geom_sum_eq hzne (M m), hzN, sub_self, zero_div]
-
-/-- Full-period root-of-unity sum: the trivial frequency contributes `M`, and
-every nontrivial frequency contributes zero. -/
-theorem phase_root_sum_fin (m : ℕ) (d : Fin (M m)) :
-    (∑ k : Fin (M m), (Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) =
-      if d = 0 then (M m : ℂ) else 0 := by
-  by_cases hd : d = 0
-  · simp [hd]
-  · simp [hd, phase_root_sum_fin_eq_zero m d hd]
-
-/-- The same roots-of-unity orthogonality theorem in mathlib's additive-character
-form over `ZMod`. -/
-theorem zmod_stdAddChar_orthogonality (m : ℕ) (d : ZMod (M m)) :
-    (∑ x : ZMod (M m), ZMod.stdAddChar (x * d)) = if d = 0 then (M m : ℂ) else 0 := by
-  have h := AddChar.sum_mulShift (R := ZMod (M m)) (R' := ℂ)
-    (ψ := ZMod.stdAddChar) d (ZMod.isPrimitive_stdAddChar (M m))
-  simpa [ZMod.card (M m)] using h
-
-/-- A one-step eigenphase equation implies the power action required by the
-controlled-power stage. -/
-theorem controlled_power_eigenphase_action {n : ℕ} {m : ℕ} {U : Square n}
-    {ψ : Vector n} {y : Fin (M m)}
-    (h : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ) :
-    ∀ k : Fin (M m), (U ^ (k : ℕ)) ⬝ ψ =
-      ((Real.fourierChar (((k : ℕ) * (y : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) • ψ := by
-  intro k
-  have hphase :
-      (Real.fourierChar (((k : ℕ) : ℝ) * (((y : ℕ) : ℝ) / (M m : ℝ))) : ℂ) =
-        (Real.fourierChar (((y : ℕ) : ℝ) / (M m : ℝ)) : ℂ) ^ (k : ℕ) := by
-    rw [← nsmul_eq_mul]
-    norm_cast
-    exact AddChar.map_nsmul_eq_pow Real.fourierChar (k : ℕ) (((y : ℕ) : ℝ) / (M m : ℝ))
-  have hpow := matrix_power_eigenvector h (k : ℕ)
-  rw [← hphase] at hpow
-  convert hpow using 1
-  congr 1
-  field_simp [show (M m : ℝ) ≠ 0 by exact_mod_cast (NeZero.ne (M m))]
-
-/-- The concrete controlled-power matrix maps the prepared uniform counting
-register and an exact eigenvector to the Fourier state required by QPE. -/
-theorem controlledPowerMatrix_mul_uniform_of_power_action {n : ℕ} {m : ℕ}
-    {U : Square n} {ψ : Vector n} {y : Fin (M m)}
-    (hpow : ∀ k : Fin (M m), (U ^ (k : ℕ)) ⬝ ψ =
-      ((Real.fourierChar (((k : ℕ) * (y : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) • ψ) :
-    controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ) = fourierState m y ⊗ ψ := by
-  ext row col
-  fin_cases col
-  rw [← finProdFinEquiv.apply_symm_apply row]
-  rcases finProdFinEquiv.symm row with ⟨k, i⟩
-  change (∑ x : Fin (M m * n),
-      controlledPowerMatrix m U (finProdFinEquiv (k, i)) x *
-        (uniformState m ⊗ ψ) x 0) = (fourierState m y ⊗ ψ) (finProdFinEquiv (k, i)) 0
-  calc
-    (∑ x : Fin (M m * n), controlledPowerMatrix m U (finProdFinEquiv (k, i)) x *
-        (uniformState m ⊗ ψ) x 0)
-        = ∑ p : Fin (M m) × Fin n,
-            controlledPowerMatrix m U (finProdFinEquiv (k, i)) (finProdFinEquiv p) *
-              (uniformState m ⊗ ψ) (finProdFinEquiv p) 0 := by
-          symm
-          exact Fintype.sum_equiv finProdFinEquiv
-            (fun p : Fin (M m) × Fin n =>
-              controlledPowerMatrix m U (finProdFinEquiv (k, i)) (finProdFinEquiv p) *
-                (uniformState m ⊗ ψ) (finProdFinEquiv p) 0)
-            (fun x : Fin (M m * n) =>
-              controlledPowerMatrix m U (finProdFinEquiv (k, i)) x *
-                (uniformState m ⊗ ψ) x 0)
-            (by intro p; rfl)
-    _ = ∑ a : Fin (M m), ∑ b : Fin n,
-            controlledPowerMatrix m U (finProdFinEquiv (k, i)) (finProdFinEquiv (a, b)) *
-              (uniformState m ⊗ ψ) (finProdFinEquiv (a, b)) 0 := by
-          rw [Fintype.sum_prod_type]
-    _ = (fourierState m y ⊗ ψ) (finProdFinEquiv (k, i)) 0 := by
-          have hki := congrFun (congrFun (hpow k) i) 0
-          simp [Matrix.mul, _root_.Matrix.mul_apply] at hki
-          have hcol0 : (finProdFinEquiv.symm (0 : Fin (1 * 1))).1 = (0 : Fin 1) :=
-            Subsingleton.elim _ _
-          have hcol1 : (finProdFinEquiv.symm (0 : Fin (1 * 1))).2 = (0 : Fin 1) :=
-            Subsingleton.elim _ _
-          simp [controlledPowerMatrix, Matrix.kron, hcol0, hcol1]
-          calc
-            ∑ x, (U ^ ↑k) i x * ((((M m : ℝ).sqrt : ℂ)⁻¹) * ψ x 0)
-                = (((M m : ℝ).sqrt : ℂ)⁻¹) * (∑ x, (U ^ ↑k) i x * ψ x 0) := by
-                  rw [Finset.mul_sum]
-                  apply Finset.sum_congr rfl
-                  intro x hx
-                  ring_nf
-            _ = (((M m : ℝ).sqrt : ℂ)⁻¹) *
-                ((Real.fourierChar (↑↑k * ↑↑y / ↑(M m)) : ℂ) * ψ i 0) := by
-                  rw [hki]
-            _ = (((M m : ℝ).sqrt : ℂ)⁻¹) * (Real.fourierChar (↑↑k * ↑↑y / ↑(M m)) : ℂ) * ψ i 0 := by
-                  ring_nf
-            _ = fourierState m y k 0 * ψ i 0 := by
-                  simp [fourierState]
-
-/-- Controlled powers produce the QPE Fourier state from the usual one-step
-eigenphase equation. -/
-theorem controlledPowerMatrix_mul_uniform_of_eigenphase {n : ℕ} {m : ℕ}
-    {U : Square n} {ψ : Vector n} {y : Fin (M m)}
-    (h : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ) :
-    controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ) = fourierState m y ⊗ ψ := by
-  exact controlledPowerMatrix_mul_uniform_of_power_action
-    (controlled_power_eigenphase_action h)
-
 /-- Controlled powers produce the kicked-back phase state for an arbitrary real eigenphase. -/
 theorem controlledPowerMatrix_mul_uniform_of_real_power_action {n : ℕ} {m : ℕ}
     {U : Square n} {ψ : Vector n} {theta : ℝ}
@@ -1481,10 +1310,6 @@ theorem controlledPowerMatrix_mul_uniform_of_real_eigenphase {n : ℕ} {m : ℕ}
     rw [← hphase] at hpow
     simpa using hpow)
 
-/-- Complex conjugation reverses the sign of the real phase. -/
-theorem star_phase (x : ℝ) : star ((Real.fourierChar x : ℂ)) = (Real.fourierChar (-x) : ℂ) := by
-  exact Circle.star_addChar x
-
 /-- The arbitrary-phase QPE phase state is normalized. -/
 theorem phaseState_isNormalized (m : ℕ) (theta : ℝ) :
     Vector.IsNormalized (phaseState m theta) := by
@@ -1493,14 +1318,14 @@ theorem phaseState_isNormalized (m : ℕ) (theta : ℝ) :
   fin_cases i
   fin_cases j
   simp [Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply]
-  simp_rw [← star_phase]
+  simp_rw [← Circle.star_addChar]
   have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
   have hterm : ∀ k : Fin (M m),
       (((M m : ℝ).sqrt : ℂ)⁻¹) * star ((Real.fourierChar ((k : ℕ) * theta) : ℂ)) *
         ((((M m : ℝ).sqrt : ℂ)⁻¹) * (Real.fourierChar ((k : ℕ) * theta) : ℂ)) =
         ((M m : ℂ)⁻¹) := by
     intro k
-    rw [star_phase]
+    rw [Circle.star_addChar]
     have hphase : (Real.fourierChar (-(↑k * theta)) : ℂ) * (Real.fourierChar (↑k * theta) : ℂ) = 1 := by
       rw [← (show (Real.fourierChar (-(↑k * theta) + ↑k * theta) : ℂ) =
           (Real.fourierChar (-(↑k * theta)) : ℂ) * (Real.fourierChar (↑k * theta) : ℂ) by
@@ -1539,23 +1364,71 @@ theorem inverseQFTMatrix_eq_adjoint_qftMatrix (m : ℕ) :
   congr 1
   ring_nf
 
-/-- Multiplying two phases after conjugating the first subtracts the angles. -/
-theorem star_phase_mul (a b : ℝ) : star ((Real.fourierChar a : ℂ)) * (Real.fourierChar b : ℂ) = (Real.fourierChar (b - a) : ℂ) := by
-  rw [star_phase]
-  rw [show b - a = -a + b by ring_nf]
-  norm_cast
-  exact (AddChar.map_add_eq_mul Real.fourierChar (-a) b).symm
-
 /-- Orthogonality of QFT phase columns before applying the normalization factor. -/
 theorem qft_phase_orthogonality (m : ℕ) (r c : Fin (M m)) :
     (∑ k : Fin (M m),
       star ((Real.fourierChar (((k : ℕ) * (r : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) *
         (Real.fourierChar (((k : ℕ) * (c : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) =
       if r = c then (M m : ℂ) else 0 := by
+  classical
+  have hstar_mul : ∀ a b : ℝ,
+      star ((Real.fourierChar a : ℂ)) * (Real.fourierChar b : ℂ) =
+        (Real.fourierChar (b - a) : ℂ) := by
+    intro a b
+    rw [Circle.star_addChar]
+    rw [show b - a = -a + b by ring_nf]
+    norm_cast
+    exact (AddChar.map_add_eq_mul Real.fourierChar (-a) b).symm
+  have hroot_zero : ∀ d : Fin (M m), d ≠ 0 →
+      (∑ k : Fin (M m),
+        (Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) = 0 := by
+    intro d hd
+    let dz : ZMod (M m) := (d : ℕ)
+    have hdz : dz ≠ 0 := by
+      intro h
+      have hdiv : M m ∣ (d : ℕ) := (ZMod.natCast_eq_zero_iff (d : ℕ) (M m)).1 h
+      exact hd (Fin.ext (Nat.eq_zero_of_dvd_of_lt hdiv d.isLt))
+    have hchar : (∑ x : ZMod (M m), ZMod.stdAddChar (x * dz)) = 0 := by
+      have h := AddChar.sum_mulShift (R := ZMod (M m)) (R' := ℂ)
+        (ψ := ZMod.stdAddChar) dz (ZMod.isPrimitive_stdAddChar (M m))
+      simpa [ZMod.card (M m), hdz] using h
+    let e : Fin (M m) ≃ ZMod (M m) :=
+      { toFun := fun k => ((k : ℕ) : ZMod (M m))
+        invFun := fun z => ⟨z.val, z.val_lt⟩
+        left_inv := by
+          intro k
+          apply Fin.ext
+          exact ZMod.val_cast_of_lt k.isLt
+        right_inv := by
+          intro z
+          exact ZMod.natCast_zmod_val z }
+    have hfin :
+        (∑ k : Fin (M m),
+            (Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) =
+          ∑ x : ZMod (M m), ZMod.stdAddChar (x * dz) := by
+      exact Fintype.sum_equiv e
+        (fun k : Fin (M m) =>
+          (Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ))
+        (fun x : ZMod (M m) => ZMod.stdAddChar (x * dz))
+        (by
+          intro k
+          have harg : e k * dz = (((k : ℕ) * (d : ℕ) : ℕ) : ZMod (M m)) := by
+            dsimp [e, dz]
+            norm_cast
+          have hcast : (((k : ℕ) * (d : ℕ) : ℕ) : ZMod (M m)) =
+              (((((k : ℕ) * (d : ℕ) : ℕ) : ℤ) : ZMod (M m))) := by
+            norm_num
+          change (Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ) =
+            ZMod.stdAddChar (e k * dz)
+          rw [harg, hcast, ZMod.stdAddChar_coe, Real.fourierChar_apply]
+          congr 1
+          norm_num
+          field_simp [show (M m : ℂ) ≠ 0 by exact_mod_cast (NeZero.ne (M m))])
+    rw [hfin, hchar]
   by_cases hEq : r = c
   · subst hEq
     simp
-    simp_rw [← star_phase]
+    simp_rw [← Circle.star_addChar]
     calc
       (∑ k : Fin (M m),
         star ((Real.fourierChar (((k : ℕ) * (r : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) *
@@ -1563,12 +1436,12 @@ theorem qft_phase_orthogonality (m : ℕ) (r c : Fin (M m)) :
           = ∑ _k : Fin (M m), (1 : ℂ) := by
             apply Finset.sum_congr rfl
             intro k hk
-            rw [star_phase_mul]
+            rw [hstar_mul]
             simp
       _ = (M m : ℂ) := by simp
   · by_cases hle : (r : ℕ) ≤ (c : ℕ)
     · simp [hEq]
-      simp_rw [← star_phase]
+      simp_rw [← Circle.star_addChar]
       let d : Fin (M m) := ⟨(c : ℕ) - (r : ℕ), Nat.lt_of_le_of_lt (Nat.sub_le _ _) c.isLt⟩
       have hd : d ≠ 0 := by
         intro hd0
@@ -1584,16 +1457,16 @@ theorem qft_phase_orthogonality (m : ℕ) (r c : Fin (M m)) :
           = ∑ k : Fin (M m), (Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ) := by
             apply Finset.sum_congr rfl
             intro k hk
-            rw [star_phase_mul]
+            rw [hstar_mul]
             dsimp [d]
             congr 1
             have hsub : ((c : ℝ) - (r : ℝ)) = (((c : ℕ) - (r : ℕ) : ℕ) : ℝ) := by
               exact (Nat.cast_sub hle).symm
             rw [← hsub]
             ring_nf
-        _ = 0 := phase_root_sum_fin_eq_zero m d hd
+        _ = 0 := hroot_zero d hd
     · simp [hEq]
-      simp_rw [← star_phase]
+      simp_rw [← Circle.star_addChar]
       have hlt : (c : ℕ) < (r : ℕ) := lt_of_not_ge hle
       let d : Fin (M m) := ⟨(r : ℕ) - (c : ℕ), Nat.lt_of_le_of_lt (Nat.sub_le _ _) r.isLt⟩
       have hd : d ≠ 0 := by
@@ -1602,7 +1475,7 @@ theorem qft_phase_orthogonality (m : ℕ) (r c : Fin (M m)) :
           simpa [d] using congrArg Fin.val hd0
         have : (r : ℕ) ≤ (c : ℕ) := Nat.le_of_sub_eq_zero hval
         exact (not_le_of_gt hlt) this
-      have hsum := phase_root_sum_fin_eq_zero m d hd
+      have hsum := hroot_zero d hd
       have hsumStar : (∑ k : Fin (M m), star ((Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ))) = 0 := by
         have h := congrArg (fun z : ℂ => star z) hsum
         simpa [map_sum] using h
@@ -1613,7 +1486,7 @@ theorem qft_phase_orthogonality (m : ℕ) (r c : Fin (M m)) :
           = ∑ k : Fin (M m), star ((Real.fourierChar (((k : ℕ) * (d : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) := by
             apply Finset.sum_congr rfl
             intro k hk
-            rw [star_phase_mul, star_phase]
+            rw [hstar_mul, Circle.star_addChar]
             dsimp [d]
             congr 1
             have hle' : (c : ℕ) ≤ (r : ℕ) := le_of_lt hlt
@@ -1634,12 +1507,6 @@ theorem qft_normalization_factor (m : ℕ) :
     norm_num
   rw [← mul_inv_rev]
   rw [hsq]
-
-/-- The mixed normalization factor appearing in approximate-QPE amplitudes. -/
-theorem qpeApprox_normalization_factor (m : ℕ) :
-    (((M m : ℝ)⁻¹.sqrt : ℂ) * (((M m : ℝ).sqrt : ℂ)⁻¹)) = ((M m : ℂ)⁻¹) := by
-  rw [Real.sqrt_inv]
-  simpa using qft_normalization_factor m
 
 /-- The approximate-QPE amplitude as a normalized finite phase sum. -/
 theorem qpeApproxAmplitude_eq_normalized_phase_sum
@@ -1663,7 +1530,9 @@ theorem qpeApproxAmplitude_eq_normalized_phase_sum
           ring_nf
     _ = ((M m : ℂ)⁻¹) *
           ((Real.fourierChar (-(↑↑y * ↑↑k / ↑(M m))) : ℂ) * (Real.fourierChar (↑↑k * theta) : ℂ)) := by
-          rw [qpeApprox_normalization_factor]
+          rw [Real.sqrt_inv]
+          rw [Complex.ofReal_inv]
+          rw [qft_normalization_factor]
     _ = ((M m : ℂ)⁻¹) *
           (Real.fourierChar ((k : ℕ) * (theta - (((y : ℕ) : ℝ) / (M m : ℝ)))) : ℂ) := by
           congr 1
@@ -1677,21 +1546,6 @@ theorem qpeApproxAmplitude_eq_normalized_phase_sum
           field_simp [show (M m : ℝ) ≠ 0 by exact_mod_cast (NeZero.ne (M m))]
           ring_nf
 
-/-- Finite geometric-sum identity for the arbitrary phase state. -/
-theorem phase_fin_sum_mul_sub (N : ℕ) (delta : ℝ) :
-    (∑ k : Fin N, (Real.fourierChar ((k : ℕ) * delta) : ℂ)) * ((Real.fourierChar delta : ℂ) - 1) =
-      (Real.fourierChar (N * delta) : ℂ) - 1 := by
-  change (∑ k : Fin N, (fun i : ℕ => (Real.fourierChar (i * delta) : ℂ)) k) * ((Real.fourierChar delta : ℂ) - 1) =
-      (Real.fourierChar (N * delta) : ℂ) - 1
-  rw [Fin.sum_univ_eq_sum_range (fun i : ℕ => (Real.fourierChar (i * delta) : ℂ)) N]
-  simp_rw [show ∀ i : ℕ, (Real.fourierChar (i * delta) : ℂ) =
-      (Real.fourierChar delta : ℂ) ^ i by
-    intro i
-    rw [← nsmul_eq_mul]
-    norm_cast
-    exact AddChar.map_nsmul_eq_pow Real.fourierChar i delta]
-  rw [geom_sum_mul]
-
 /-- Squared norm of the finite phase sum in sine-ratio form. -/
 theorem phase_fin_sum_normSq {N : ℕ} {delta : ℝ}
     (hden : Real.sin (Real.pi * delta) ≠ 0) :
@@ -1699,7 +1553,21 @@ theorem phase_fin_sum_normSq {N : ℕ} {delta : ℝ}
       (Real.sin (Real.pi * (N : ℝ) * delta) ^ 2) /
         (Real.sin (Real.pi * delta) ^ 2) := by
   let S : ℂ := ∑ k : Fin N, (Real.fourierChar ((k : ℕ) * delta) : ℂ)
-  have hmul := congrArg Complex.normSq (phase_fin_sum_mul_sub N delta)
+  have hgeom : S * ((Real.fourierChar delta : ℂ) - 1) =
+      (Real.fourierChar (N * delta) : ℂ) - 1 := by
+    dsimp [S]
+    change (∑ k : Fin N, (fun i : ℕ => (Real.fourierChar (i * delta) : ℂ)) k) *
+        ((Real.fourierChar delta : ℂ) - 1) =
+      (Real.fourierChar (N * delta) : ℂ) - 1
+    rw [Fin.sum_univ_eq_sum_range (fun i : ℕ => (Real.fourierChar (i * delta) : ℂ)) N]
+    simp_rw [show ∀ i : ℕ, (Real.fourierChar (i * delta) : ℂ) =
+        (Real.fourierChar delta : ℂ) ^ i by
+      intro i
+      rw [← nsmul_eq_mul]
+      norm_cast
+      exact AddChar.map_nsmul_eq_pow Real.fourierChar i delta]
+    rw [geom_sum_mul]
+  have hmul := congrArg Complex.normSq hgeom
   change Complex.normSq (S * ((Real.fourierChar delta : ℂ) - 1)) =
     Complex.normSq ((Real.fourierChar (N * delta) : ℂ) - 1) at hmul
   rw [Complex.normSq_mul] at hmul
@@ -1718,7 +1586,7 @@ theorem phase_fin_sum_normSq {N : ℕ} {delta : ℝ}
 theorem qftMatrix_adjoint_mul_self (m : ℕ) : (qftMatrix m)† ⬝ qftMatrix m = I (M m) := by
   ext r c
   simp [Matrix.mul, Matrix.adjoint, qftMatrix, _root_.Matrix.mul_apply]
-  simp_rw [← star_phase]
+  simp_rw [← Circle.star_addChar]
   calc
     (∑ x : Fin (M m),
         (((M m : ℝ).sqrt : ℂ)⁻¹) * star ((Real.fourierChar (((x : ℕ) * (r : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) *
@@ -1742,34 +1610,27 @@ theorem qftMatrix_adjoint_mul_self (m : ℕ) : (qftMatrix m)† ⬝ qftMatrix m 
 theorem qftMatrix_isUnitary (m : ℕ) : Matrix.isUnitary (qftMatrix m) := by
   rw [Matrix.isUnitary_iff_adjoint_mul_self]
   exact qftMatrix_adjoint_mul_self m
-/-- Matrix-level correctness facts for the concrete inverse QFT matrix. -/
-structure InverseQFTMatrixCorrect (m : ℕ) where
-  isUnitary : Matrix.isUnitary (inverseQFTMatrix m)
-  maps_fourierState : ∀ y : Fin (M m), inverseQFTMatrix m ⬝ fourierState m y = Vector.basis y
+/-- The concrete inverse-QFT matrix is unitary. -/
+theorem inverseQFTMatrix_isUnitary (m : ℕ) : Matrix.isUnitary (inverseQFTMatrix m) := by
+  rw [inverseQFTMatrix_eq_adjoint_qftMatrix]
+  rw [Matrix.isUnitary_iff_adjoint_mul_self]
+  rw [Matrix.adjoint_adjoint]
+  exact (Matrix.isUnitary_iff_mul_adjoint_self (qftMatrix m)).mp (qftMatrix_isUnitary m)
 
-/-- If the concrete QFT matrix is unitary, then the concrete inverse-QFT matrix
-satisfies the exact inverse-QFT contract required by QPE. -/
-def inverseQFTMatrixCorrectOfQFTUnitary {m : ℕ}
-    (hunitary : Matrix.isUnitary (qftMatrix m)) : InverseQFTMatrixCorrect m where
-  isUnitary := by
-    rw [inverseQFTMatrix_eq_adjoint_qftMatrix]
-    rw [Matrix.isUnitary_iff_adjoint_mul_self]
-    rw [Matrix.adjoint_adjoint]
-    exact (Matrix.isUnitary_iff_mul_adjoint_self (qftMatrix m)).mp hunitary
-  maps_fourierState := by
-    intro y
-    rw [← qftMatrix_mul_basisState]
-    rw [inverseQFTMatrix_eq_adjoint_qftMatrix]
-    calc
-      (qftMatrix m)† ⬝ (qftMatrix m ⬝ Vector.basis y) =
-          ((qftMatrix m)† ⬝ qftMatrix m) ⬝ Vector.basis y := by
-        change (Matrix.adjoint (qftMatrix m) * (qftMatrix m * Vector.basis y)) =
-          ((Matrix.adjoint (qftMatrix m) * qftMatrix m) * Vector.basis y)
-        rw [_root_.Matrix.mul_assoc]
-      _ = Vector.basis y := by
-        have hmul := (Matrix.isUnitary_iff_adjoint_mul_self (qftMatrix m)).mp hunitary
-        rw [hmul]
-        simp [Matrix.mul]
+/-- The concrete inverse-QFT matrix maps exact phase states back to basis states. -/
+theorem inverseQFTMatrix_mul_phaseState (m : ℕ) (y : Fin (M m)) :
+    inverseQFTMatrix m ⬝ phaseState m (((y : ℕ) : ℝ) / (M m : ℝ)) = Vector.basis y := by
+  rw [← qftMatrix_mul_basisState]
+  rw [inverseQFTMatrix_eq_adjoint_qftMatrix]
+  calc
+    (qftMatrix m)† ⬝ (qftMatrix m ⬝ Vector.basis y) =
+        ((qftMatrix m)† ⬝ qftMatrix m) ⬝ Vector.basis y := by
+      change (Matrix.adjoint (qftMatrix m) * (qftMatrix m * Vector.basis y)) =
+        ((Matrix.adjoint (qftMatrix m) * qftMatrix m) * Vector.basis y)
+      rw [_root_.Matrix.mul_assoc]
+    _ = Vector.basis y := by
+      rw [qftMatrix_adjoint_mul_self]
+      simp [Matrix.mul]
 
 /-- Approximate-QPE outcome probabilities form a probability distribution. -/
 theorem qpeApproxOutcomeProbability_total (m : ℕ) (theta : ℝ) :
@@ -1779,178 +1640,45 @@ theorem qpeApproxOutcomeProbability_total (m : ℕ) (theta : ℝ) :
   have hs : Vector.IsNormalized s := by
     dsimp [s]
     exact Matrix.isUnitary_mul_isNormalized
-      (inverseQFTMatrixCorrectOfQFTUnitary (qftMatrix_isUnitary m)).isUnitary
+      (inverseQFTMatrix_isUnitary m)
       (phaseState_isNormalized m theta)
-  exact Measurement.sum_prob_of_isNormalized hs
-
-/-- Circular success and circular failure probabilities partition total probability. -/
-theorem qpeCircularPhaseWindowProbability_add_failure_eq_one
-    (m k : ℕ) (theta : ℝ) :
-    qpeCircularPhaseWindowProbability m k theta +
-      qpeCircularPhaseWindowFailureProbability m k theta = 1 := by
-  classical
-  unfold qpeCircularPhaseWindowProbability qpeCircularPhaseWindowFailureProbability
-  unfold qpeCircularPhaseWindowOutcomes qpeCircularPhaseWindowFailureOutcomes
-  have hsplit := Finset.sum_filter_add_sum_filter_not
-    (s := Finset.univ) (p := qpeCircularPhaseWindow m k theta)
-    (f := fun y : Fin (M m) => qpeApproxOutcomeProbability m theta y)
-  rw [hsplit]
-  exact qpeApproxOutcomeProbability_total m theta
-
-/-- Success probability is one minus circular failure probability. -/
-theorem qpeCircularPhaseWindowProbability_eq_one_sub_failure
-    (m k : ℕ) (theta : ℝ) :
-    qpeCircularPhaseWindowProbability m k theta =
-      1 - qpeCircularPhaseWindowFailureProbability m k theta := by
-  have h := qpeCircularPhaseWindowProbability_add_failure_eq_one m k theta
-  linarith
-
-/-- Failure probability is one minus circular success probability. -/
-theorem qpeCircularPhaseWindowFailureProbability_eq_one_sub_success
-    (m k : ℕ) (theta : ℝ) :
-    qpeCircularPhaseWindowFailureProbability m k theta =
-      1 - qpeCircularPhaseWindowProbability m k theta := by
-  have h := qpeCircularPhaseWindowProbability_add_failure_eq_one m k theta
-  linarith
-
-/-- Specification for an inverse QFT on `m` qubits.  This is the exact property
-needed by QPE. -/
-structure InverseQFTSpec (m : ℕ) where
-  matrix : Square (M m)
-  isUnitary : Matrix.isUnitary matrix
-  maps_fourierState : ∀ y : Fin (M m), matrix ⬝ fourierState m y = Vector.basis y
-
-/-- Turn correctness facts for the concrete inverse QFT matrix into the abstract
-QPE inverse-QFT contract. -/
-def inverseQFTSpecOfMatrixCorrect {m : ℕ} (h : InverseQFTMatrixCorrect m) : InverseQFTSpec m where
-  matrix := inverseQFTMatrix m
-  isUnitary := h.isUnitary
-  maps_fourierState := h.maps_fourierState
-
-/-- Specification for the controlled-power stage of QPE for a fixed eigenvector.
-It says that the stage maps the prepared uniform counting register to the Fourier
-basis state while leaving the target eigenvector untouched. -/
-structure ControlledPowersSpec {n : ℕ} (m : ℕ) (U : Square n) (ψ : Vector n)
-    (y : Fin (M m)) where
-  matrix : Square (M m * n)
-  isUnitary : Matrix.isUnitary matrix
-  eigenvector_normalized : Vector.IsNormalized ψ
-  eigenphase : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ
-  maps_uniform_state : matrix ⬝ (uniformState m ⊗ ψ) = fourierState m y ⊗ ψ
-
-/-- Build the abstract controlled-power QPE contract from the concrete matrix. -/
-def controlledPowersSpecOfEigenphase {n : ℕ} {m : ℕ} {U : Square n}
-    {ψ : Vector n} {y : Fin (M m)}
-    (hU : Matrix.isUnitary U)
-    (hnorm : Vector.IsNormalized ψ)
-    (heigen : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ) :
-    ControlledPowersSpec m U ψ y where
-  matrix := controlledPowerMatrix m U
-  isUnitary := controlledPowerMatrix_isUnitary m hU
-  eigenvector_normalized := hnorm
-  eigenphase := heigen
-  maps_uniform_state := controlledPowerMatrix_mul_uniform_of_eigenphase heigen
-
-/-- Semantic QPE output for an exact phase: controlled powers followed by the
-inverse QFT on the counting register. -/
-def exactQPEState {n : ℕ} {m : ℕ} {U : Square n} {ψ : Vector n} {y : Fin (M m)}
-    (ctrl : ControlledPowersSpec m U ψ y) (iqft : InverseQFTSpec m) : Vector (M m * n) :=
-  (iqft.matrix ⊗ (I n)) ⬝ (ctrl.matrix ⬝ (uniformState m ⊗ ψ))
-
-/-- Exact QPE output state: the counting register is `|y⟩` and the target remains
-`ψ`. -/
-theorem exactQPEState_eq_basis_tensor_eigenstate {n : ℕ} {m : ℕ} {U : Square n}
-    {ψ : Vector n} {y : Fin (M m)}
-    (ctrl : ControlledPowersSpec m U ψ y) (iqft : InverseQFTSpec m) :
-    exactQPEState ctrl iqft = Vector.basis y ⊗ ψ := by
-  unfold exactQPEState
-  rw [ctrl.maps_uniform_state]
-  rw [Matrix.kron_mul]
-  rw [iqft.maps_fourierState]
-  simp [Matrix.mul]
-
-/-- Exact QPE correctness for a chosen target basis index.  If the target
-post-QPE eigenstate has probability one at `j`, the joint measurement returns
-`(y,j)` with probability one. -/
-theorem exactQPE_success_probability_one_of_target_basis {n : ℕ} {m : ℕ} {U : Square n}
-    {ψ : Vector n} {y : Fin (M m)} {j : Fin n}
-    (ctrl : ControlledPowersSpec m U ψ y) (iqft : InverseQFTSpec m)
-    (hψj : Measurement.prob ψ j = 1) :
-    Measurement.prob (exactQPEState ctrl iqft) (finProdFinEquiv (y, j)) = 1 := by
-  rw [exactQPEState_eq_basis_tensor_eigenstate ctrl iqft]
-  rw [Measurement.prob_kron_apply]
-  simp [hψj]
-
-/-- Exact QPE keeps the target-state distribution while fixing the counting
-register at the exact phase index. -/
-theorem exactQPE_joint_probability {n : ℕ} {m : ℕ} {U : Square n}
-    {ψ : Vector n} {y : Fin (M m)} (j : Fin n)
-    (ctrl : ControlledPowersSpec m U ψ y) (iqft : InverseQFTSpec m) :
-    Measurement.prob (exactQPEState ctrl iqft) (finProdFinEquiv (y, j)) =
-      Measurement.prob ψ j := by
-  rw [exactQPEState_eq_basis_tensor_eigenstate ctrl iqft]
-  rw [Measurement.prob_kron_apply]
-  simp
+  exact QuantumLibrary.computational_measurement_total_probability hs
 
 /-- Concrete exact-QPE state correctness: the counting register is exactly `|y⟩`. -/
 theorem exactQPEStateConcrete_eq_basis_tensor_eigenstate {n : ℕ} {m : ℕ} {U : Square n}
     {ψ : Vector n} {y : Fin (M m)}
-    (hU : Matrix.isUnitary U)
-    (hnorm : Vector.IsNormalized ψ)
     (heigen : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ) :
-    exactQPEState (controlledPowersSpecOfEigenphase hU hnorm heigen) (inverseQFTSpecOfMatrixCorrect (inverseQFTMatrixCorrectOfQFTUnitary (qftMatrix_isUnitary m))) = Vector.basis y ⊗ ψ := by
-  exact exactQPEState_eq_basis_tensor_eigenstate
-    (controlledPowersSpecOfEigenphase hU hnorm heigen) (inverseQFTSpecOfMatrixCorrect (inverseQFTMatrixCorrectOfQFTUnitary (qftMatrix_isUnitary m)))
+    (inverseQFTMatrix m ⊗ (I n)) ⬝
+        (controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ)) = Vector.basis y ⊗ ψ := by
+  rw [controlledPowerMatrix_mul_uniform_of_real_eigenphase heigen]
+  rw [Matrix.kron_mul]
+  rw [inverseQFTMatrix_mul_phaseState]
+  simp [Matrix.mul]
 
 /-- Concrete exact-QPE measurement correctness for any target basis index. -/
 theorem exactQPEConcrete_joint_probability {n : ℕ} {m : ℕ} {U : Square n}
     {ψ : Vector n} {y : Fin (M m)} (j : Fin n)
-    (hU : Matrix.isUnitary U)
-    (hnorm : Vector.IsNormalized ψ)
     (heigen : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ) :
-    Measurement.prob (exactQPEState (controlledPowersSpecOfEigenphase hU hnorm heigen) (inverseQFTSpecOfMatrixCorrect (inverseQFTMatrixCorrectOfQFTUnitary (qftMatrix_isUnitary m)))) (finProdFinEquiv (y, j)) =
-      Measurement.prob ψ j := by
-  exact exactQPE_joint_probability j
-    (controlledPowersSpecOfEigenphase hU hnorm heigen) (inverseQFTSpecOfMatrixCorrect (inverseQFTMatrixCorrectOfQFTUnitary (qftMatrix_isUnitary m)))
+    Measurement.prob
+        ((inverseQFTMatrix m ⊗ (I n)) ⬝
+          (controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ)))
+        (finProdFinEquiv (y, j)) = Measurement.prob ψ j := by
+  rw [exactQPEStateConcrete_eq_basis_tensor_eigenstate heigen]
+  rw [Measurement.prob_kron_apply]
+  simp
 
 /-- Concrete exact-QPE success probability when the target state is deterministic
 at basis index `j`. -/
 theorem exactQPEConcrete_success_probability_one_of_target_basis {n : ℕ} {m : ℕ}
     {U : Square n} {ψ : Vector n} {y : Fin (M m)} {j : Fin n}
-    (hU : Matrix.isUnitary U)
-    (hnorm : Vector.IsNormalized ψ)
     (heigen : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ)
     (hψj : Measurement.prob ψ j = 1) :
-    Measurement.prob (exactQPEState (controlledPowersSpecOfEigenphase hU hnorm heigen) (inverseQFTSpecOfMatrixCorrect (inverseQFTMatrixCorrectOfQFTUnitary (qftMatrix_isUnitary m)))) (finProdFinEquiv (y, j)) = 1 := by
-  rw [exactQPEConcrete_joint_probability j hU hnorm heigen]
+    Measurement.prob
+        ((inverseQFTMatrix m ⊗ (I n)) ⬝
+          (controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ)))
+        (finProdFinEquiv (y, j)) = 1 := by
+  rw [exactQPEConcrete_joint_probability j heigen]
   exact hψj
-
-/-- Under the nearest-grid hypothesis, a nonzero phase error cannot make the
-sine denominator in the geometric-probability formula vanish. -/
-theorem sin_pi_delta_ne_zero_of_nearest {N : ℕ} {delta : ℝ}
-    (hN : 0 < N) (hdelta : delta ≠ 0)
-    (hclose : |delta| ≤ 1 / (2 * (N : ℝ))) :
-    Real.sin (Real.pi * delta) ≠ 0 := by
-  have hNge1 : (1 : ℝ) ≤ (N : ℝ) := by exact_mod_cast hN
-  have hdelta_le_half : |delta| ≤ (1 : ℝ) / 2 := by
-    calc
-      |delta| ≤ 1 / (2 * (N : ℝ)) := hclose
-      _ ≤ 1 / 2 := by
-        rw [div_le_div_iff₀ (by positivity : 0 < (2 : ℝ) * (N : ℝ))
-          (by norm_num : (0 : ℝ) < 2)]
-        nlinarith
-  have harg_abs_lt_pi : |Real.pi * delta| < Real.pi := by
-    calc
-      |Real.pi * delta| = Real.pi * |delta| := by
-        rw [abs_mul, abs_of_pos Real.pi_pos]
-      _ ≤ Real.pi * (1 / 2) := by gcongr
-      _ < Real.pi := by nlinarith [Real.pi_pos]
-  have harg_ne_zero : Real.pi * delta ≠ 0 := mul_ne_zero Real.pi_ne_zero hdelta
-  have hz := (Real.sin_eq_zero_iff_of_lt_of_lt (x := Real.pi * delta)
-    (by have := abs_lt.mp harg_abs_lt_pi; exact this.1)
-    (by have := abs_lt.mp harg_abs_lt_pi; exact this.2)).mp
-  intro hs
-  exact harg_ne_zero (hz hs)
 
 /-- The matrix-level approximate-QPE probability equals the standard sine-ratio
 geometric probability for any outcome whose sine denominator is nonzero. -/
@@ -1997,8 +1725,27 @@ theorem qpeApproxOutcomeProbability_eq_geometric_of_nearest
     simp [hdelta, qpeApproxAmplitude_eq_normalized_phase_sum, hNneC]
   · have hdelta_orig : theta - (((y : ℕ) : ℝ) / (M m : ℝ)) ≠ 0 := by
       simpa [delta] using hdelta
-    have hden : Real.sin (Real.pi * delta) ≠ 0 :=
-      sin_pi_delta_ne_zero_of_nearest hNpos hdelta hclose'
+    have hden : Real.sin (Real.pi * delta) ≠ 0 := by
+      have hNge1 : (1 : ℝ) ≤ (M m : ℝ) := by exact_mod_cast hNpos
+      have hdelta_le_half : |delta| ≤ (1 : ℝ) / 2 := by
+        calc
+          |delta| ≤ 1 / (2 * (M m : ℝ)) := hclose'
+          _ ≤ 1 / 2 := by
+            rw [div_le_div_iff₀ (by positivity : 0 < (2 : ℝ) * (M m : ℝ))
+              (by norm_num : (0 : ℝ) < 2)]
+            nlinarith
+      have harg_abs_lt_pi : |Real.pi * delta| < Real.pi := by
+        calc
+          |Real.pi * delta| = Real.pi * |delta| := by
+            rw [abs_mul, abs_of_pos Real.pi_pos]
+          _ ≤ Real.pi * (1 / 2) := by gcongr
+          _ < Real.pi := by nlinarith [Real.pi_pos]
+      have harg_ne_zero : Real.pi * delta ≠ 0 := mul_ne_zero Real.pi_ne_zero hdelta
+      have hz := (Real.sin_eq_zero_iff_of_lt_of_lt (x := Real.pi * delta)
+        (by have := abs_lt.mp harg_abs_lt_pi; exact this.1)
+        (by have := abs_lt.mp harg_abs_lt_pi; exact this.2)).mp
+      intro hs
+      exact harg_ne_zero (hz hs)
     have hden_orig :
         Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ)))) ≠ 0 := by
       simpa [delta] using hden
@@ -2038,178 +1785,6 @@ theorem qpeApproxGeometricProbability_upper_bound_sin_den {N : ℕ} {delta : ℝ
             exact mul_nonneg (inv_nonneg.mpr hden_sq_pos.le)
               (inv_nonneg.mpr (sq_nonneg (N : ℝ)))
           simpa using mul_le_mul_of_nonneg_right hnum_le hright_nonneg
-
-/-- Sine denominator lower bound from a scaled distance condition.
-
-This is the trigonometric bridge used in the BHMT tail estimate after reducing
-the phase error to the nearest representative in `[-1/2, 1/2]`. -/
-theorem sin_pi_lower_of_scaled_distance_le_abs
-    {N j : ℕ} {delta : ℝ}
-    (hhalf : |delta| ≤ (1 : ℝ) / 2)
-    (hdist : (j : ℝ) / (N : ℝ) ≤ |delta|) :
-    2 * (j : ℝ) / (N : ℝ) ≤ |Real.sin (Real.pi * delta)| := by
-  have harg_le : |Real.pi * delta| ≤ Real.pi / 2 := by
-    calc
-      |Real.pi * delta| = Real.pi * |delta| := by
-        rw [abs_mul, abs_of_pos Real.pi_pos]
-      _ ≤ Real.pi * ((1 : ℝ) / 2) := by gcongr
-      _ = Real.pi / 2 := by ring_nf
-  have hsin_lower := Real.mul_abs_le_abs_sin (x := Real.pi * delta) harg_le
-  calc
-    2 * (j : ℝ) / (N : ℝ) = 2 * ((j : ℝ) / (N : ℝ)) := by ring_nf
-    _ ≤ 2 * |delta| := by gcongr
-    _ = 2 / Real.pi * |Real.pi * delta| := by
-      rw [abs_mul, abs_of_pos Real.pi_pos]
-      field_simp [Real.pi_ne_zero]
-    _ ≤ |Real.sin (Real.pi * delta)| := hsin_lower
-
-/-- Absolute sine is invariant under subtracting one full phase turn inside
-`sin (π * ·)`. -/
-theorem abs_sin_pi_mul_sub_one (delta : ℝ) :
-    |Real.sin (Real.pi * (delta - 1))| = |Real.sin (Real.pi * delta)| := by
-  have harg : Real.pi * (delta - 1) = Real.pi * delta - Real.pi := by ring_nf
-  rw [harg, Real.sin_sub_pi, abs_neg]
-
-/-- Absolute sine is invariant under adding one full phase turn inside
-`sin (π * ·)`. -/
-theorem abs_sin_pi_mul_add_one (delta : ℝ) :
-    |Real.sin (Real.pi * (delta + 1))| = |Real.sin (Real.pi * delta)| := by
-  have harg : Real.pi * (delta + 1) = Real.pi * delta + Real.pi := by ring_nf
-  rw [harg, Real.sin_add_pi, abs_neg]
-
-/-- A failed circular-window outcome has a wrapped phase-error representative to
-which the sine-denominator lower bound applies. -/
-theorem sin_pi_lower_of_qpeCircularFailure_representative
-    (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1)
-    {y : Fin (M m)}
-    (hy : y ∈ qpeCircularPhaseWindowFailureOutcomes m k theta) :
-    ∃ delta : ℝ,
-      (delta = theta - (((y : ℕ) : ℝ) / (M m : ℝ)) ∨
-        delta = theta - (((y : ℕ) : ℝ) / (M m : ℝ)) - 1 ∨
-        delta = theta - (((y : ℕ) : ℝ) / (M m : ℝ)) + 1) ∧
-      |delta| ≤ (1 : ℝ) / 2 ∧
-      (k : ℝ) / (M m : ℝ) < |delta| ∧
-      2 * (k : ℝ) / (M m : ℝ) ≤ |Real.sin (Real.pi * delta)| := by
-  rcases qpeCircularFailure_phase_error_representative m k h0 h1 hy with
-    ⟨delta, hdelta, hhalf, hdist⟩
-  refine ⟨delta, hdelta, hhalf, hdist, ?_⟩
-  exact sin_pi_lower_of_scaled_distance_le_abs
-    (N := M m) (j := k) hhalf (le_of_lt hdist)
-
-/-- The wrapped representative supplied by a circular-window failure gives the
-same sine-denominator lower bound for the literal phase error, because
-`|sin (πx)|` is one-periodic. -/
-theorem sin_pi_lower_of_qpeCircularFailure_literal
-    (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1)
-    {y : Fin (M m)}
-    (hy : y ∈ qpeCircularPhaseWindowFailureOutcomes m k theta) :
-    2 * (k : ℝ) / (M m : ℝ) ≤
-      |Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ))))| := by
-  rcases sin_pi_lower_of_qpeCircularFailure_representative m k h0 h1 hy with
-    ⟨delta, hdelta, _hhalf, _hdist, hsin⟩
-  rcases hdelta with hdelta | hdelta | hdelta
-  · simpa [hdelta] using hsin
-  · have hlit : theta - (((y : ℕ) : ℝ) / (M m : ℝ)) = delta + 1 := by
-      linarith
-    rw [hlit, abs_sin_pi_mul_add_one]
-    exact hsin
-  · have hlit : theta - (((y : ℕ) : ℝ) / (M m : ℝ)) = delta - 1 := by
-      linarith
-    rw [hlit, abs_sin_pi_mul_sub_one]
-    exact hsin
-
-/-- A circular-window failure with positive radius has nonzero approximate-QPE
-sine denominator. -/
-theorem sin_pi_ne_zero_of_qpeCircularFailure
-    (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1)
-    {y : Fin (M m)} (hk : 0 < k)
-    (hy : y ∈ qpeCircularPhaseWindowFailureOutcomes m k theta) :
-    Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ)))) ≠ 0 := by
-  have hsin := sin_pi_lower_of_qpeCircularFailure_literal m k h0 h1 hy
-  have hkR : 0 < (k : ℝ) := by exact_mod_cast hk
-  have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-  have hleft_pos : 0 < 2 * (k : ℝ) / (M m : ℝ) := by positivity
-  have hspos : 0 < |Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ))))| :=
-    lt_of_lt_of_le hleft_pos hsin
-  exact abs_pos.mp hspos
-
-/-- A failed outcome's real circular-distance bucket gives a sine-denominator
-lower bound for a wrapped phase-error representative. -/
-theorem sin_pi_lower_of_qpeCircularFailure_distanceBucket_representative
-    (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1)
-    {y : Fin (M m)}
-    (hy : y ∈ qpeCircularPhaseWindowFailureOutcomes m k theta) :
-    ∃ delta : ℝ,
-      (delta = theta - (((y : ℕ) : ℝ) / (M m : ℝ)) ∨
-        delta = theta - (((y : ℕ) : ℝ) / (M m : ℝ)) - 1 ∨
-        delta = theta - (((y : ℕ) : ℝ) / (M m : ℝ)) + 1) ∧
-      |delta| ≤ (1 : ℝ) / 2 ∧
-      (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤ |delta| ∧
-      2 * (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤
-        |Real.sin (Real.pi * delta)| := by
-  rcases qpeCircularFailure_phase_error_representative_with_unitDistance m k h0 h1 hy with
-    ⟨delta, hdelta, hhalf, _hdist, hD⟩
-  have hbucketD :
-      (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤
-        unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)) := by
-    have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-    have hD_nonneg :
-        0 ≤ unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)) :=
-      unitPhaseDistance_nonneg theta (((y : ℕ) : ℝ) / (M m : ℝ))
-    have hx_nonneg :
-        0 ≤ (M m : ℝ) * unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)) := by
-      positivity
-    have hfloor :
-        (qpeCircularDistanceBucket m theta y : ℝ) ≤
-          (M m : ℝ) * unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)) := by
-      unfold qpeCircularDistanceBucket
-      exact Nat.floor_le hx_nonneg
-    rw [div_le_iff₀ hMpos]
-    simpa [mul_comm] using hfloor
-  have hbucket_abs :
-      (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤ |delta| :=
-    le_trans hbucketD hD
-  refine ⟨delta, hdelta, hhalf, hbucket_abs, ?_⟩
-  exact sin_pi_lower_of_scaled_distance_le_abs
-    (N := M m) (j := qpeCircularDistanceBucket m theta y) hhalf hbucket_abs
-
-/-- The real circular-distance bucket gives the sine-denominator lower bound for
-the literal approximate-QPE phase error. -/
-theorem sin_pi_lower_of_qpeCircularFailure_distanceBucket_literal
-    (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1)
-    {y : Fin (M m)}
-    (hy : y ∈ qpeCircularPhaseWindowFailureOutcomes m k theta) :
-    2 * (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤
-      |Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ))))| := by
-  rcases sin_pi_lower_of_qpeCircularFailure_distanceBucket_representative m k h0 h1 hy with
-    ⟨delta, hdelta, _hhalf, _hdist, hsin⟩
-  rcases hdelta with hdelta | hdelta | hdelta
-  · simpa [hdelta] using hsin
-  · have hlit : theta - (((y : ℕ) : ℝ) / (M m : ℝ)) = delta + 1 := by
-      linarith
-    rw [hlit, abs_sin_pi_mul_add_one]
-    exact hsin
-  · have hlit : theta - (((y : ℕ) : ℝ) / (M m : ℝ)) = delta - 1 := by
-      linarith
-    rw [hlit, abs_sin_pi_mul_sub_one]
-    exact hsin
-
-/-- Positive distance bucket implies nonzero approximate-QPE sine denominator. -/
-theorem sin_pi_ne_zero_of_qpeCircularFailure_distanceBucket
-    (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1)
-    {y : Fin (M m)}
-    (hy : y ∈ qpeCircularPhaseWindowFailureOutcomes m k theta)
-    (hbpos : 0 < qpeCircularDistanceBucket m theta y) :
-    Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ)))) ≠ 0 := by
-  have hsin := sin_pi_lower_of_qpeCircularFailure_distanceBucket_literal m k h0 h1 hy
-  have hbR : 0 < (qpeCircularDistanceBucket m theta y : ℝ) := by exact_mod_cast hbpos
-  have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-  have hleft_pos :
-      0 < 2 * (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) := by
-    positivity
-  have hspos : 0 < |Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ))))| :=
-    lt_of_lt_of_le hleft_pos hsin
-  exact abs_pos.mp hspos
 
 theorem qpeApproxGeometricProbability_upper_bound_of_sin_lower
     {N j : ℕ} {delta : ℝ}
@@ -2272,8 +1847,71 @@ theorem qpeApproxOutcomeProbability_failure_upper_bound_distanceBucket
   have hbpos : 0 < qpeCircularDistanceBucket m theta y := by
     have hlt : k - 1 < qpeCircularDistanceBucket m theta y := (Finset.mem_Ioc.mp hbmem).1
     omega
-  have hsin := sin_pi_lower_of_qpeCircularFailure_distanceBucket_literal m k h0 h1 hy
-  have hden := sin_pi_ne_zero_of_qpeCircularFailure_distanceBucket m k h0 h1 hy hbpos
+  have hsin : 2 * (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤
+      |Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ))))| := by
+    rcases qpeCircularFailure_phase_error_representative_with_unitDistance m k h0 h1 hy with
+      ⟨delta, hdelta, hhalf, _hdist, hD⟩
+    have hbucketD :
+        (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤
+          unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)) := by
+      have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
+      have hD_nonneg :
+          0 ≤ unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)) :=
+        unitPhaseDistance_nonneg theta (((y : ℕ) : ℝ) / (M m : ℝ))
+      have hx_nonneg :
+          0 ≤ (M m : ℝ) * unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)) := by
+        exact mul_nonneg hMpos.le hD_nonneg
+      have hfloor :
+          (qpeCircularDistanceBucket m theta y : ℝ) ≤
+            (M m : ℝ) * unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)) := by
+        unfold qpeCircularDistanceBucket
+        exact Nat.floor_le hx_nonneg
+      rw [div_le_iff₀ hMpos]
+      simpa [mul_comm] using hfloor
+    have hbucket_abs :
+        (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤ |delta| :=
+      le_trans hbucketD hD
+    have hsin_delta :
+        2 * (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) ≤
+          |Real.sin (Real.pi * delta)| := by
+      have harg_le : |Real.pi * delta| ≤ Real.pi / 2 := by
+        calc
+          |Real.pi * delta| = Real.pi * |delta| := by
+            rw [abs_mul, abs_of_pos Real.pi_pos]
+          _ ≤ Real.pi * ((1 : ℝ) / 2) := by gcongr
+          _ = Real.pi / 2 := by ring_nf
+      have hsin_lower := Real.mul_abs_le_abs_sin (x := Real.pi * delta) harg_le
+      calc
+        2 * (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) =
+            2 * ((qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ)) := by ring_nf
+        _ ≤ 2 * |delta| := by gcongr
+        _ = 2 / Real.pi * |Real.pi * delta| := by
+          rw [abs_mul, abs_of_pos Real.pi_pos]
+          field_simp [Real.pi_ne_zero]
+        _ ≤ |Real.sin (Real.pi * delta)| := hsin_lower
+    rcases hdelta with hdelta | hdelta | hdelta
+    · simpa [hdelta] using hsin_delta
+    · have hlit : theta - (((y : ℕ) : ℝ) / (M m : ℝ)) = delta + 1 := by
+        linarith
+      rw [hlit]
+      have harg : Real.pi * (delta + 1) = Real.pi * delta + Real.pi := by ring_nf
+      rw [harg, Real.sin_add_pi, abs_neg]
+      exact hsin_delta
+    · have hlit : theta - (((y : ℕ) : ℝ) / (M m : ℝ)) = delta - 1 := by
+        linarith
+      rw [hlit]
+      have harg : Real.pi * (delta - 1) = Real.pi * delta - Real.pi := by ring_nf
+      rw [harg, Real.sin_sub_pi, abs_neg]
+      exact hsin_delta
+  have hden : Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ)))) ≠ 0 := by
+    have hbR : 0 < (qpeCircularDistanceBucket m theta y : ℝ) := by exact_mod_cast hbpos
+    have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
+    have hleft_pos :
+        0 < 2 * (qpeCircularDistanceBucket m theta y : ℝ) / (M m : ℝ) := by
+      positivity
+    have hspos : 0 < |Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ))))| :=
+      lt_of_lt_of_le hleft_pos hsin
+    exact abs_pos.mp hspos
   exact qpeApproxOutcomeProbability_upper_bound_of_sin_lower
     m (qpeCircularDistanceBucket m theta y) theta y hbpos hden hsin
 
@@ -2467,122 +2105,20 @@ theorem qpeCircularPhaseWindowProbability_lower_bound_k_gt_one
     (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1) (hk : 1 < k) :
     bhmt11SuccessProbability k ≤ qpeCircularPhaseWindowProbability m k theta := by
   have hfail := qpeCircularFailureProbability_le_k_gt_one m k h0 h1 hk
-  have hsucc := qpeCircularPhaseWindowProbability_eq_one_sub_failure m k theta
+  have htotal :
+      qpeCircularPhaseWindowProbability m k theta +
+        qpeCircularPhaseWindowFailureProbability m k theta = 1 := by
+    classical
+    unfold qpeCircularPhaseWindowProbability qpeCircularPhaseWindowFailureProbability
+    unfold qpeCircularPhaseWindowOutcomes qpeCircularPhaseWindowFailureOutcomes
+    have hsplit := Finset.sum_filter_add_sum_filter_not
+      (s := Finset.univ) (p := qpeCircularPhaseWindow m k theta)
+      (f := fun y : Fin (M m) => qpeApproxOutcomeProbability m theta y)
+    rw [hsplit]
+    exact qpeApproxOutcomeProbability_total m theta
   have hk_ne : k ≠ 1 := by omega
   rw [bhmt11SuccessProbability, if_neg hk_ne]
-  rw [hsucc]
   linarith
-
-theorem qpeApproxGeometricProbability_lower_bound {N : ℕ} {delta : ℝ}
-    (hN : 0 < N) (hclose : |delta| ≤ 1 / (2 * (N : ℝ))) :
-    4 / Real.pi ^ 2 ≤ qpeApproxGeometricProbability N delta := by
-  unfold qpeApproxGeometricProbability
-  by_cases hdelta : delta = 0
-  · simp [hdelta]
-    have hpi2 : 4 ≤ Real.pi ^ 2 := by
-      nlinarith [Real.pi_gt_three]
-    have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
-    exact (div_le_one hpi_sq_pos).mpr hpi2
-  · simp [hdelta]
-    set a := |Real.sin (Real.pi * (N : ℝ) * delta)|
-    set b := |Real.sin (Real.pi * delta)|
-    have hNposR : 0 < (N : ℝ) := by exact_mod_cast hN
-    have hNnonnegR : 0 ≤ (N : ℝ) := le_of_lt hNposR
-    have hpi_pos : 0 < Real.pi := Real.pi_pos
-    have hpi_nonneg : 0 ≤ Real.pi := le_of_lt hpi_pos
-    have hnum_arg_le : |Real.pi * (N : ℝ) * delta| ≤ Real.pi / 2 := by
-      calc
-        |Real.pi * (N : ℝ) * delta| = Real.pi * (N : ℝ) * |delta| := by
-          rw [abs_mul, abs_mul, abs_of_pos hpi_pos, abs_of_nonneg hNnonnegR]
-        _ ≤ Real.pi * (N : ℝ) * (1 / (2 * (N : ℝ))) := by
-          gcongr
-        _ = Real.pi / 2 := by
-          field_simp [ne_of_gt hNposR]
-    have hnum_lower_raw := Real.mul_abs_le_abs_sin
-      (x := Real.pi * (N : ℝ) * delta) hnum_arg_le
-    have hnum_lower : 2 * (N : ℝ) * |delta| ≤ a := by
-      dsimp [a]
-      calc
-        2 * (N : ℝ) * |delta| = 2 / Real.pi * |Real.pi * (N : ℝ) * delta| := by
-          rw [abs_mul, abs_mul, abs_of_pos hpi_pos, abs_of_nonneg hNnonnegR]
-          field_simp [Real.pi_ne_zero]
-        _ ≤ |Real.sin (Real.pi * (N : ℝ) * delta)| := hnum_lower_raw
-    have hden_upper_raw := Real.abs_sin_le_abs (x := Real.pi * delta)
-    have hden_upper : b ≤ Real.pi * |delta| := by
-      dsimp [b]
-      calc
-        |Real.sin (Real.pi * delta)| ≤ |Real.pi * delta| := hden_upper_raw
-        _ = Real.pi * |delta| := by
-          rw [abs_mul, abs_of_pos hpi_pos]
-    have hdelta_le_half : |delta| ≤ (1 : ℝ) / 2 := by
-      calc
-        |delta| ≤ 1 / (2 * (N : ℝ)) := hclose
-        _ ≤ 1 / 2 := by
-          have hNge1 : (1 : ℝ) ≤ (N : ℝ) := by exact_mod_cast hN
-          rw [div_le_div_iff₀ (by positivity : 0 < (2 : ℝ) * (N : ℝ))
-            (by norm_num : (0 : ℝ) < 2)]
-          nlinarith
-    have harg_abs_lt_pi : |Real.pi * delta| < Real.pi := by
-      calc
-        |Real.pi * delta| = Real.pi * |delta| := by
-          rw [abs_mul, abs_of_pos hpi_pos]
-        _ ≤ Real.pi * (1 / 2) := by gcongr
-        _ < Real.pi := by nlinarith [Real.pi_pos]
-    have harg_ne_zero : Real.pi * delta ≠ 0 := by
-      exact mul_ne_zero Real.pi_ne_zero hdelta
-    have hsin_ne : Real.sin (Real.pi * delta) ≠ 0 := by
-      have hz := (Real.sin_eq_zero_iff_of_lt_of_lt (x := Real.pi * delta)
-        (by have := abs_lt.mp harg_abs_lt_pi; exact this.1)
-        (by have := abs_lt.mp harg_abs_lt_pi; exact this.2)).mp
-      intro hs
-      exact harg_ne_zero (hz hs)
-    have hb_pos : 0 < b := by
-      dsimp [b]
-      exact abs_pos.mpr hsin_ne
-    have hNb_pos : 0 < (N : ℝ) * b := mul_pos hNposR hb_pos
-    have hratio_lower : 2 / Real.pi ≤ a / ((N : ℝ) * b) := by
-      rw [le_div_iff₀ hNb_pos]
-      calc
-        2 / Real.pi * ((N : ℝ) * b) ≤
-            2 / Real.pi * ((N : ℝ) * (Real.pi * |delta|)) := by
-          gcongr
-        _ = 2 * (N : ℝ) * |delta| := by
-          field_simp [Real.pi_ne_zero]
-        _ ≤ a := hnum_lower
-    have hratio_abs_lower :
-        2 / Real.pi ≤
-          |Real.sin (Real.pi * (N : ℝ) * delta) /
-            ((N : ℝ) * Real.sin (Real.pi * delta))| := by
-      have habs_ratio :
-          |Real.sin (Real.pi * (N : ℝ) * delta) /
-            ((N : ℝ) * Real.sin (Real.pi * delta))| = a / ((N : ℝ) * b) := by
-        dsimp [a, b]
-        rw [abs_div, abs_mul, abs_of_pos hNposR]
-      rw [habs_ratio]
-      exact hratio_lower
-    have htwo_div_pi_nonneg : 0 ≤ 2 / Real.pi := div_nonneg (by norm_num) hpi_nonneg
-    have hratio_abs_lower' :
-        |2 / Real.pi| ≤
-          |Real.sin (Real.pi * (N : ℝ) * delta) /
-            ((N : ℝ) * Real.sin (Real.pi * delta))| := by
-      simpa [abs_of_nonneg htwo_div_pi_nonneg] using hratio_abs_lower
-    have hsquares :
-        (2 / Real.pi) ^ 2 ≤
-          (Real.sin (Real.pi * (N : ℝ) * delta) /
-            ((N : ℝ) * Real.sin (Real.pi * delta))) ^ 2 := by
-      simpa [sq_abs] using (sq_le_sq.mpr hratio_abs_lower')
-    calc
-      4 / Real.pi ^ 2 = (2 / Real.pi) ^ 2 := by ring_nf
-      _ ≤ (Real.sin (Real.pi * (N : ℝ) * delta) /
-          ((N : ℝ) * Real.sin (Real.pi * delta))) ^ 2 := hsquares
-
-/-- Unconditional matrix-level nearest-outcome lower bound for approximate QPE. -/
-theorem qpeApproxOutcomeProbability_lower_bound_nearest
-    (m : ℕ) {theta : ℝ} (y : Fin (M m))
-    (hclose : |theta - (((y : ℕ) : ℝ) / (M m : ℝ))| ≤ 1 / (2 * (M m : ℝ))) :
-    4 / Real.pi ^ 2 ≤ qpeApproxOutcomeProbability m theta y := by
-  rw [qpeApproxOutcomeProbability_eq_geometric_of_nearest m theta y hclose]
-  exact qpeApproxGeometricProbability_lower_bound (Nat.two_pow_pos m) hclose
 
 /-- Exact-grid lower adjacent outcome has probability one. -/
 theorem qpeApproxOutcomeProbability_lowerAdjacent_eq_one_of_fractionalOffset_eq_zero
@@ -2637,37 +2173,6 @@ theorem qpeCircularPhaseWindowProbability_lower_bound_k1_exactGrid_of_mem_Ico
     exact (div_le_one hpi_sq_pos).mpr hpi_sq_ge_eight
   exact le_trans h8_le_one hsingle
 
-private theorem qpeApproxOutcomeProbability_eq_sub_one
-    (m : ℕ) (theta : ℝ) (y : Fin (M m)) :
-    qpeApproxOutcomeProbability m theta y = qpeApproxOutcomeProbability m (theta - 1) y := by
-  have h := qpeApproxOutcomeProbability_add_one m (theta - 1) y
-  have harg : theta - 1 + 1 = theta := by ring_nf
-  simpa [harg] using h
-
-private theorem sin_pi_scaled_fractional_ne_zero
-    (m : ℕ) {x : ℝ} (hx0 : 0 < x) (hx1 : x < 1) :
-    Real.sin (Real.pi * (x / (M m : ℝ))) ≠ 0 := by
-  have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-  have harg_pos : 0 < Real.pi * (x / (M m : ℝ)) := by positivity
-  have hx_div_lt_one : x / (M m : ℝ) < 1 := by
-    have hMge1 : (1 : ℝ) ≤ (M m : ℝ) := by exact_mod_cast (Nat.succ_le_of_lt (Nat.two_pow_pos m))
-    rw [div_lt_one hMpos]
-    nlinarith
-  have harg_lt_pi : Real.pi * (x / (M m : ℝ)) < Real.pi := by
-    nlinarith [Real.pi_pos, hx_div_lt_one]
-  exact (Real.sin_pos_of_pos_of_lt_pi harg_pos harg_lt_pi).ne'
-
-private theorem sin_pi_scaled_one_sub_fractional_neg_ne_zero
-    (m : ℕ) {x : ℝ} (hx0 : 0 < x) (hx1 : x < 1) :
-    Real.sin (Real.pi * (-(1 - x) / (M m : ℝ))) ≠ 0 := by
-  have hx10 : 0 < 1 - x := by linarith
-  have hx11 : 1 - x < 1 := by linarith
-  have hpos := sin_pi_scaled_fractional_ne_zero m hx10 hx11
-  have harg : Real.pi * (-(1 - x) / (M m : ℝ)) =
-      -(Real.pi * ((1 - x) / (M m : ℝ))) := by ring_nf
-  rw [harg, Real.sin_neg]
-  exact neg_ne_zero.mpr hpos
-
 /-- Lower adjacent outcome probability as the lower two-nearest geometric term. -/
 theorem qpeApproxOutcomeProbability_lowerAdjacent_eq_geometric_fractionalOffset
     (m : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta < 1)
@@ -2696,7 +2201,16 @@ theorem qpeApproxOutcomeProbability_lowerAdjacent_eq_geometric_fractionalOffset
     field_simp [hMpos.ne']
   have hden : Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ)))) ≠ 0 := by
     rw [hdelta]
-    exact sin_pi_scaled_fractional_ne_zero m hx0 (Int.fract_lt_one ((M m : ℝ) * theta))
+    have hx1 : qpeFractionalOffset m theta < 1 := Int.fract_lt_one ((M m : ℝ) * theta)
+    have harg_pos : 0 < Real.pi * (qpeFractionalOffset m theta / (M m : ℝ)) := by positivity
+    have hx_div_lt_one : qpeFractionalOffset m theta / (M m : ℝ) < 1 := by
+      have hMge1 : (1 : ℝ) ≤ (M m : ℝ) := by
+        exact_mod_cast (Nat.succ_le_of_lt (Nat.two_pow_pos m))
+      rw [div_lt_one hMpos]
+      nlinarith
+    have harg_lt_pi : Real.pi * (qpeFractionalOffset m theta / (M m : ℝ)) < Real.pi := by
+      nlinarith [Real.pi_pos, hx_div_lt_one]
+    exact (Real.sin_pos_of_pos_of_lt_pi harg_pos harg_lt_pi).ne'
   rw [qpeApproxOutcomeProbability_eq_geometric_of_sin_ne_zero m theta y hden]
   rw [hdelta]
 
@@ -2719,8 +2233,24 @@ theorem qpeApproxOutcomeProbability_upperAdjacent_eq_geometric_fractionalOffset
     dsimp [n]
     exact floorGridIndexNat_lt_M_of_mem_Ico m h0 h1
   have hx1 : qpeFractionalOffset m theta < 1 := Int.fract_lt_one ((M m : ℝ) * theta)
-  have hden_target : Real.sin (Real.pi * (-(1 - qpeFractionalOffset m theta) / (M m : ℝ))) ≠ 0 :=
-    sin_pi_scaled_one_sub_fractional_neg_ne_zero m hx0 hx1
+  have hden_target : Real.sin (Real.pi * (-(1 - qpeFractionalOffset m theta) / (M m : ℝ))) ≠ 0 := by
+    have hx10 : 0 < 1 - qpeFractionalOffset m theta := by linarith
+    have hx11 : 1 - qpeFractionalOffset m theta < 1 := by linarith
+    have hpos : Real.sin (Real.pi * ((1 - qpeFractionalOffset m theta) / (M m : ℝ))) ≠ 0 := by
+      have harg_pos : 0 < Real.pi * ((1 - qpeFractionalOffset m theta) / (M m : ℝ)) := by
+        positivity
+      have hx_div_lt_one : (1 - qpeFractionalOffset m theta) / (M m : ℝ) < 1 := by
+        have hMge1 : (1 : ℝ) ≤ (M m : ℝ) := by
+          exact_mod_cast (Nat.succ_le_of_lt hMposNat)
+        rw [div_lt_one hMpos]
+        nlinarith
+      have harg_lt_pi : Real.pi * ((1 - qpeFractionalOffset m theta) / (M m : ℝ)) < Real.pi := by
+        nlinarith [Real.pi_pos, hx_div_lt_one]
+      exact (Real.sin_pos_of_pos_of_lt_pi harg_pos harg_lt_pi).ne'
+    have harg : Real.pi * (-(1 - qpeFractionalOffset m theta) / (M m : ℝ)) =
+        -(Real.pi * ((1 - qpeFractionalOffset m theta) / (M m : ℝ))) := by ring_nf
+    rw [harg, Real.sin_neg]
+    exact neg_ne_zero.mpr hpos
   by_cases hsucc_lt : n + 1 < M m
   · have hyval : (y : ℕ) = n + 1 := by
       dsimp [y, qpeUpperAdjacentOutcome, n]
@@ -2766,182 +2296,14 @@ theorem qpeApproxOutcomeProbability_upperAdjacent_eq_geometric_fractionalOffset
     have hden : Real.sin (Real.pi * (theta - 1 - (((y : ℕ) : ℝ) / (M m : ℝ)))) ≠ 0 := by
       rw [hdelta_sub]
       exact hden_target
-    rw [qpeApproxOutcomeProbability_eq_sub_one m theta y]
+    have hperiod : qpeApproxOutcomeProbability m theta y =
+        qpeApproxOutcomeProbability m (theta - 1) y := by
+      have h := qpeApproxOutcomeProbability_add_one m (theta - 1) y
+      have harg : theta - 1 + 1 = theta := by ring_nf
+      simpa [harg] using h
+    rw [hperiod]
     rw [qpeApproxOutcomeProbability_eq_geometric_of_sin_ne_zero m (theta - 1) y hden]
     rw [hdelta_sub]
-
-/-- The one-point counting grid `m = 0` satisfies the `k = 1` lower bound
-directly: the only outcome has probability one and lies in the radius-one window
-for `theta ∈ [0, 1]`. -/
-theorem qpeCircularPhaseWindowProbability_lower_bound_k1_m_zero
-    {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1) :
-    8 / Real.pi ^ 2 ≤ qpeCircularPhaseWindowProbability 0 1 theta := by
-  let y := zeroIndex 0
-  have hprob_one : qpeApproxOutcomeProbability 0 theta y = 1 := by
-    unfold qpeApproxOutcomeProbability
-    rw [qpeApproxAmplitude_eq_normalized_phase_sum]
-    simp [M, y, zeroIndex]
-  have hywin : y ∈ qpeCircularPhaseWindowOutcomes 0 1 theta := by
-    apply (mem_qpeCircularPhaseWindowOutcomes_iff 0 1 theta y).mpr
-    unfold qpeCircularPhaseWindow
-    have hdist : unitPhaseDistance theta (((y : ℕ) : ℝ) / (M 0 : ℝ)) ≤ 1 := by
-      exact le_trans (unitPhaseDistance_le_abs_sub theta (((y : ℕ) : ℝ) / (M 0 : ℝ))) (by
-        dsimp [y, zeroIndex, M]
-        simpa [abs_of_nonneg h0] using h1)
-    simpa [M] using hdist
-  unfold qpeCircularPhaseWindowProbability
-  have hsingle : qpeApproxOutcomeProbability 0 theta y ≤
-      (qpeCircularPhaseWindowOutcomes 0 1 theta).sum
-        (fun z => qpeApproxOutcomeProbability 0 theta z) :=
-    Finset.single_le_sum (fun z _hz => qpeApproxOutcomeProbability_nonneg 0 theta z) hywin
-  rw [hprob_one] at hsingle
-  have h8_le_one : 8 / Real.pi ^ 2 ≤ 1 := by
-    have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
-    have hpi_sq_ge_eight : 8 ≤ Real.pi ^ 2 := by
-      nlinarith [Real.pi_gt_three]
-    exact (div_le_one hpi_sq_pos).mpr hpi_sq_ge_eight
-  exact le_trans h8_le_one hsingle
-
-/-- Endpoint `theta = 1` for the `k = 1` circular-window lower bound.  The
-probability is reduced by periodicity to the exact grid point `theta = 0`. -/
-theorem qpeCircularPhaseWindowProbability_lower_bound_k1_theta_one
-    (m : ℕ) :
-    8 / Real.pi ^ 2 ≤ qpeCircularPhaseWindowProbability m 1 1 := by
-  let y := zeroIndex m
-  have hprob_zero : qpeApproxOutcomeProbability m 0 y = 1 := by
-    have hclose : |(0 : ℝ) - (((y : ℕ) : ℝ) / (M m : ℝ))| ≤
-        1 / (2 * (M m : ℝ)) := by
-      dsimp [y, zeroIndex]
-      simp
-    have hgeom := qpeApproxOutcomeProbability_eq_geometric_of_nearest m 0 y hclose
-    rw [hgeom]
-    simp [qpeApproxGeometricProbability, y, zeroIndex]
-  have hprob_one : qpeApproxOutcomeProbability m 1 y = 1 := by
-    rw [qpeApproxOutcomeProbability_eq_sub_one]
-    simpa using hprob_zero
-  have hywin : y ∈ qpeCircularPhaseWindowOutcomes m 1 1 := by
-    apply (mem_qpeCircularPhaseWindowOutcomes_iff m 1 1 y).mpr
-    unfold qpeCircularPhaseWindow unitPhaseDistance
-    dsimp [y, zeroIndex]
-    simp
-  unfold qpeCircularPhaseWindowProbability
-  have hsingle : qpeApproxOutcomeProbability m 1 y ≤
-      (qpeCircularPhaseWindowOutcomes m 1 1).sum
-        (fun z => qpeApproxOutcomeProbability m 1 z) :=
-    Finset.single_le_sum (fun z _hz => qpeApproxOutcomeProbability_nonneg m 1 z) hywin
-  rw [hprob_one] at hsingle
-  have h8_le_one : 8 / Real.pi ^ 2 ≤ 1 := by
-    have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
-    have hpi_sq_ge_eight : 8 ≤ Real.pi ^ 2 := by
-      nlinarith [Real.pi_gt_three]
-    exact (div_le_one hpi_sq_pos).mpr hpi_sq_ge_eight
-  exact le_trans h8_le_one hsingle
-
-theorem qpeCircularPhaseWindowProbability_lower_bound_one_of_mem_unitInterval
-    (m : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1) :
-    4 / Real.pi ^ 2 ≤ qpeCircularPhaseWindowProbability m 1 theta := by
-  classical
-  let n := (round ((M m : ℝ) * theta)).toNat
-  have hn_le : n ≤ M m := by
-    dsimp [n]
-    have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-    let x : ℝ := (M m : ℝ) * theta
-    have hx_nonneg : 0 ≤ x := by nlinarith [hMpos, h0]
-    have hround_nonneg : 0 ≤ round x := by
-      rw [round_eq]
-      exact Int.floor_nonneg.mpr (by nlinarith)
-    have hx_lt : x + (1 / 2 : ℝ) < (M m : ℝ) + 1 := by
-      nlinarith [hMpos, h1]
-    have hround_lt : round x < (M m : ℤ) + 1 := by
-      rw [round_eq, Int.floor_lt]
-      exact_mod_cast hx_lt
-    have hnat_lt : (round x).toNat < M m + 1 := by
-      rw [← Nat.cast_lt (α := ℤ), Int.toNat_of_nonneg hround_nonneg]
-      simpa using hround_lt
-    simpa [x] using Nat.lt_succ_iff.mp hnat_lt
-  by_cases hn_lt : n < M m
-  · let y : Fin (M m) := ⟨n, hn_lt⟩
-    have hclose : |theta - (((y : ℕ) : ℝ) / (M m : ℝ))| ≤ 1 / (2 * (M m : ℝ)) := by
-      exact abs_grid_error_le_half_div_M m h0 rfl
-    have hprob : 4 / Real.pi ^ 2 ≤ qpeApproxOutcomeProbability m theta y :=
-      qpeApproxOutcomeProbability_lower_bound_nearest m y hclose
-    have hywin : y ∈ qpeCircularPhaseWindowOutcomes m 1 theta := by
-      apply (mem_qpeCircularPhaseWindowOutcomes_iff m 1 theta y).mpr
-      unfold qpeCircularPhaseWindow
-      exact le_trans (unitPhaseDistance_le_abs_sub theta (((y : ℕ) : ℝ) / (M m : ℝ)))
-        (by simpa using le_trans hclose (half_div_M_le_one_div_M m))
-    unfold qpeCircularPhaseWindowProbability
-    exact le_trans hprob
-      (Finset.single_le_sum (fun z _hz => qpeApproxOutcomeProbability_nonneg m theta z) hywin)
-  · have hn_eq : n = M m := le_antisymm hn_le (Nat.le_of_not_gt hn_lt)
-    let y : Fin (M m) := zeroIndex m
-    have hclose_raw : |theta - 1| ≤ 1 / (2 * (M m : ℝ)) := by
-      have hcloseM : |theta - (n : ℝ) / (M m : ℝ)| ≤ 1 / (2 * (M m : ℝ)) :=
-        abs_grid_error_le_half_div_M m h0 rfl
-      have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-      have hone : (n : ℝ) / (M m : ℝ) = 1 := by
-        rw [hn_eq]
-        field_simp [hMpos.ne']
-      simpa [hone] using hcloseM
-    have hclose_sub : |(theta - 1) - (((y : ℕ) : ℝ) / (M m : ℝ))| ≤ 1 / (2 * (M m : ℝ)) := by
-      simpa [y, zeroIndex] using hclose_raw
-    have hprob_sub : 4 / Real.pi ^ 2 ≤ qpeApproxOutcomeProbability m (theta - 1) y :=
-      qpeApproxOutcomeProbability_lower_bound_nearest m y hclose_sub
-    have hprob : 4 / Real.pi ^ 2 ≤ qpeApproxOutcomeProbability m theta y := by
-      rw [qpeApproxOutcomeProbability_eq_sub_one]
-      exact hprob_sub
-    have hywin : y ∈ qpeCircularPhaseWindowOutcomes m 1 theta := by
-      apply (mem_qpeCircularPhaseWindowOutcomes_iff m 1 theta y).mpr
-      unfold qpeCircularPhaseWindow
-      exact le_trans (unitPhaseDistance_le_sub_one theta (((y : ℕ) : ℝ) / (M m : ℝ)))
-        (by
-          have htmp : |theta - (((y : ℕ) : ℝ) / (M m : ℝ)) - 1| ≤ 1 / (2 * (M m : ℝ)) := by
-            simpa [y, zeroIndex] using hclose_raw
-          simpa using le_trans htmp (half_div_M_le_one_div_M m))
-    unfold qpeCircularPhaseWindowProbability
-    exact le_trans hprob
-      (Finset.single_le_sum (fun z _hz => qpeApproxOutcomeProbability_nonneg m theta z) hywin)
-
-/-- Concrete QPE state for an arbitrary real eigenphase.  Unlike exact QPE, the
-counting register is generally a distribution over basis states after inverse QFT. -/
-def approxQPEStateConcrete {n : ℕ} {m : ℕ} {U : Square n} {ψ : Vector n}
-    (_theta : ℝ) : Vector (M m * n) :=
-  (inverseQFTMatrix m ⊗ (I n)) ⬝ (controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ))
-
-/-- Approximate QPE semantics: after phase kickback and inverse QFT, the counting
-register is exactly `inverseQFTMatrix m ⬝ phaseState m theta`. -/
-theorem approxQPEStateConcrete_eq_distribution_tensor_eigenstate {n : ℕ} {m : ℕ}
-    {U : Square n} {ψ : Vector n} {theta : ℝ}
-    (heigen : U ⬝ ψ = ((Real.fourierChar theta : ℂ)) • ψ) :
-    approxQPEStateConcrete (U := U) (ψ := ψ) theta =
-      (inverseQFTMatrix m ⬝ phaseState m theta) ⊗ ψ := by
-  unfold approxQPEStateConcrete
-  rw [controlledPowerMatrix_mul_uniform_of_real_eigenphase heigen]
-  rw [Matrix.kron_mul]
-  simp [Matrix.mul]
-
-/-- Approximate QPE joint probability formula.  The counting-register marginal is
-`qpeApproxOutcomeProbability m theta y`; the target register keeps the original
-computational-basis distribution of `ψ`. -/
-theorem approxQPEConcrete_joint_probability {n : ℕ} {m : ℕ} {U : Square n}
-    {ψ : Vector n} {theta : ℝ} (y : Fin (M m)) (j : Fin n)
-    (heigen : U ⬝ ψ = ((Real.fourierChar theta : ℂ)) • ψ) :
-    Measurement.prob (approxQPEStateConcrete (U := U) (ψ := ψ) theta) (finProdFinEquiv (y, j)) =
-      qpeApproxOutcomeProbability m theta y * Measurement.prob ψ j := by
-  rw [approxQPEStateConcrete_eq_distribution_tensor_eigenstate heigen]
-  rw [Measurement.prob_kron_apply]
-  rfl
-
-/-- Approximate QPE specializes to exact QPE when the phase is exactly representable
-as `y / M`. -/
-theorem approxQPEStateConcrete_eq_exact_phase_distribution {n : ℕ} {m : ℕ}
-    {U : Square n} {ψ : Vector n} {y : Fin (M m)}
-    (heigen : U ⬝ ψ = ((Real.fourierChar (((y : ℕ) : ℝ) / (M m : ℝ)) : ℂ)) • ψ) :
-    approxQPEStateConcrete (U := U) (ψ := ψ) (((y : ℕ) : ℝ) / (M m : ℝ)) =
-      Vector.basis y ⊗ ψ := by
-  rw [approxQPEStateConcrete_eq_distribution_tensor_eigenstate heigen]
-  rw [phaseState_eq_fourierState]
-  exact (inverseQFTMatrixCorrectOfQFTUnitary (qftMatrix_isUnitary m)).maps_fourierState y ▸ rfl
 
 end QPE
 end QAE

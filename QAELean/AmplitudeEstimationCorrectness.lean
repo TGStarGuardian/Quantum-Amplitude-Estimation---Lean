@@ -19,8 +19,9 @@ open QuantumComputing
 /-- The QAE counting-register marginal on the canonical Grover plane. -/
 def qaeGroverPlaneMarginal (m : ℕ) (theta : ℝ) (y : Fin (QPE.M m)) : ℝ :=
   qpeCountingMarginal
-    (QPE.approxQPEStateConcrete (m := m) (U := groverPlaneRotation theta)
-      (ψ := QuantumLibrary.qaePlaneVector theta) (0 : ℝ)) y
+    ((QPE.inverseQFTMatrix m ⊗ (I 2)) ⬝
+      (QPE.controlledPowerMatrix m (groverPlaneRotation theta) ⬝
+        (QPE.uniformState m ⊗ QuantumLibrary.qaePlaneVector theta))) y
 
 @[simp] theorem qaeGroverPlaneMarginal_eq
     (m : ℕ) (theta : ℝ) (y : Fin (QPE.M m)) :
@@ -48,147 +49,6 @@ theorem qaeGroverPlaneMarginal_eq_wrapped
   rw [qaeGroverPlaneMarginal_eq]
   rw [QPE.qpeApproxOutcomeProbability_one_sub]
 
-theorem qaeGroverPlaneMarginal_lower_bound_of_pos_nearest
-    (m : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
-    (hclose : |theta / Real.pi - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| ≤
-      1 / (2 * (QPE.M m : ℝ))) :
-    2 / Real.pi ^ 2 ≤ qaeGroverPlaneMarginal m theta y := by
-  rw [qaeGroverPlaneMarginal_eq]
-  have hpos := QPE.qpeApproxOutcomeProbability_lower_bound_nearest m y hclose
-  have hneg_nonneg : 0 ≤ QPE.qpeApproxOutcomeProbability m (-(theta / Real.pi)) y := by
-    unfold QPE.qpeApproxOutcomeProbability
-    exact Complex.normSq_nonneg _
-  calc
-    2 / Real.pi ^ 2 = (1 / 2 : ℝ) * (4 / Real.pi ^ 2) := by ring
-    _ ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y := by
-      exact mul_le_mul_of_nonneg_left hpos (by norm_num)
-    _ ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y +
-        (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (-(theta / Real.pi)) y := by
-      have hhalfneg : 0 ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (-(theta / Real.pi)) y := by
-        exact mul_nonneg (by norm_num) hneg_nonneg
-      linarith
-
-theorem qaeGroverPlaneMarginal_lower_bound_of_neg_nearest
-    (m : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
-    (hclose : |-(theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| ≤
-      1 / (2 * (QPE.M m : ℝ))) :
-    2 / Real.pi ^ 2 ≤ qaeGroverPlaneMarginal m theta y := by
-  rw [qaeGroverPlaneMarginal_eq]
-  have hneg := QPE.qpeApproxOutcomeProbability_lower_bound_nearest m y hclose
-  have hpos_nonneg : 0 ≤ QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y := by
-    unfold QPE.qpeApproxOutcomeProbability
-    exact Complex.normSq_nonneg _
-  calc
-    2 / Real.pi ^ 2 = (1 / 2 : ℝ) * (4 / Real.pi ^ 2) := by ring
-    _ ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (-(theta / Real.pi)) y := by
-      exact mul_le_mul_of_nonneg_left hneg (by norm_num)
-    _ ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y +
-        (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (-(theta / Real.pi)) y := by
-      have hhalfpos : 0 ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y := by
-        exact mul_nonneg (by norm_num) hpos_nonneg
-      linarith
-
-theorem qaeGroverPlaneMarginal_lower_bound_of_wrapped_neg_nearest
-    (m : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
-    (hclose : |(1 - theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| ≤
-      1 / (2 * (QPE.M m : ℝ))) :
-    2 / Real.pi ^ 2 ≤ qaeGroverPlaneMarginal m theta y := by
-  rw [qaeGroverPlaneMarginal_eq_wrapped]
-  have hneg := QPE.qpeApproxOutcomeProbability_lower_bound_nearest m y hclose
-  have hpos_nonneg : 0 ≤ QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y := by
-    unfold QPE.qpeApproxOutcomeProbability
-    exact Complex.normSq_nonneg _
-  calc
-    2 / Real.pi ^ 2 = (1 / 2 : ℝ) * (4 / Real.pi ^ 2) := by ring
-    _ ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (1 - theta / Real.pi) y := by
-      exact mul_le_mul_of_nonneg_left hneg (by norm_num)
-    _ ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y +
-        (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (1 - theta / Real.pi) y := by
-      have hhalfpos : 0 ≤ (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y := by
-        exact mul_nonneg (by norm_num) hpos_nonneg
-      linarith
-
-private theorem phase_angle_error_of_pos_nearest
-    (m : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
-    (hclose : |theta / Real.pi - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| ≤
-      1 / (2 * (QPE.M m : ℝ))) :
-    |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - theta| ≤
-      phaseErrorRadius (QPE.M m) 1 := by
-  unfold phaseErrorRadius
-  have hmul := mul_le_mul_of_nonneg_left hclose (le_of_lt Real.pi_pos)
-  have hrewrite : |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - theta| =
-      Real.pi * |theta / Real.pi - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| := by
-    have harg : (Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - theta =
-        -(Real.pi * (theta / Real.pi - (((y : ℕ) : ℝ) / (QPE.M m : ℝ)))) := by
-      field_simp [Real.pi_ne_zero]
-      ring
-    rw [harg, abs_neg, abs_mul, abs_of_pos Real.pi_pos]
-  calc
-    |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - theta|
-        = Real.pi * |theta / Real.pi - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| := hrewrite
-    _ ≤ Real.pi * (1 / (2 * (QPE.M m : ℝ))) := hmul
-    _ ≤ Real.pi * ((1 : ℕ) : ℝ) / (QPE.M m : ℝ) := by
-      have hMpos : 0 < (QPE.M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-      have hhalf : (1 : ℝ) / (2 * (QPE.M m : ℝ)) ≤ 1 / (QPE.M m : ℝ) := by
-        field_simp [hMpos.ne']
-        nlinarith [hMpos]
-      have hfinal := mul_le_mul_of_nonneg_left hhalf (le_of_lt Real.pi_pos)
-      simpa [one_div, mul_assoc] using hfinal
-
-private theorem phase_angle_error_of_neg_nearest
-    (m : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
-    (hclose : |-(theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| ≤
-      1 / (2 * (QPE.M m : ℝ))) :
-    |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (-theta)| ≤
-      phaseErrorRadius (QPE.M m) 1 := by
-  unfold phaseErrorRadius
-  have hmul := mul_le_mul_of_nonneg_left hclose (le_of_lt Real.pi_pos)
-  have hrewrite : |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (-theta)| =
-      Real.pi * |-(theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| := by
-    have harg : (Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (-theta) =
-        -(Real.pi * (-(theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ)))) := by
-      field_simp [Real.pi_ne_zero]
-      ring
-    rw [harg, abs_neg, abs_mul, abs_of_pos Real.pi_pos]
-  calc
-    |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (-theta)|
-        = Real.pi * |-(theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| := hrewrite
-    _ ≤ Real.pi * (1 / (2 * (QPE.M m : ℝ))) := hmul
-    _ ≤ Real.pi * ((1 : ℕ) : ℝ) / (QPE.M m : ℝ) := by
-      have hMpos : 0 < (QPE.M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-      have hhalf : (1 : ℝ) / (2 * (QPE.M m : ℝ)) ≤ 1 / (QPE.M m : ℝ) := by
-        field_simp [hMpos.ne']
-        nlinarith [hMpos]
-      have hfinal := mul_le_mul_of_nonneg_left hhalf (le_of_lt Real.pi_pos)
-      simpa [one_div, mul_assoc] using hfinal
-
-private theorem phase_angle_error_of_wrapped_neg_nearest
-    (m : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
-    (hclose : |(1 - theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| ≤
-      1 / (2 * (QPE.M m : ℝ))) :
-    |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (Real.pi - theta)| ≤
-      phaseErrorRadius (QPE.M m) 1 := by
-  unfold phaseErrorRadius
-  have hmul := mul_le_mul_of_nonneg_left hclose (le_of_lt Real.pi_pos)
-  have hrewrite : |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (Real.pi - theta)| =
-      Real.pi * |(1 - theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| := by
-    have harg : (Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (Real.pi - theta) =
-        -(Real.pi * ((1 - theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ)))) := by
-      field_simp [Real.pi_ne_zero]
-      ring
-    rw [harg, abs_neg, abs_mul, abs_of_pos Real.pi_pos]
-  calc
-    |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (Real.pi - theta)|
-        = Real.pi * |(1 - theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| := hrewrite
-    _ ≤ Real.pi * (1 / (2 * (QPE.M m : ℝ))) := hmul
-    _ ≤ Real.pi * ((1 : ℕ) : ℝ) / (QPE.M m : ℝ) := by
-      have hMpos : 0 < (QPE.M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-      have hhalf : (1 : ℝ) / (2 * (QPE.M m : ℝ)) ≤ 1 / (QPE.M m : ℝ) := by
-        field_simp [hMpos.ne']
-        nlinarith [hMpos]
-      have hfinal := mul_le_mul_of_nonneg_left hhalf (le_of_lt Real.pi_pos)
-      simpa [one_div, mul_assoc] using hfinal
-
 private theorem phase_angle_error_of_pos_window
     (m k : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
     (hclose : QPE.qpePhaseWindow m k (theta / Real.pi) y) :
@@ -209,36 +69,6 @@ private theorem phase_angle_error_of_pos_window
     _ ≤ Real.pi * ((k : ℝ) / (QPE.M m : ℝ)) := hmul
     _ = Real.pi * (k : ℝ) / (QPE.M m : ℝ) := by ring
 
-private theorem phase_angle_error_of_wrapped_neg_window
-    (m k : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
-    (hclose : QPE.qpePhaseWindow m k (1 - theta / Real.pi) y) :
-    |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (Real.pi - theta)| ≤
-      phaseErrorRadius (QPE.M m) k := by
-  unfold QPE.qpePhaseWindow phaseErrorRadius at *
-  have hmul := mul_le_mul_of_nonneg_left hclose (le_of_lt Real.pi_pos)
-  have hrewrite : |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (Real.pi - theta)| =
-      Real.pi * |(1 - theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| := by
-    have harg : (Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (Real.pi - theta) =
-        -(Real.pi * ((1 - theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ)))) := by
-      field_simp [Real.pi_ne_zero]
-      ring
-    rw [harg, abs_neg, abs_mul, abs_of_pos Real.pi_pos]
-  calc
-    |(Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) - (Real.pi - theta)|
-        = Real.pi * |(1 - theta / Real.pi) - (((y : ℕ) : ℝ) / (QPE.M m : ℝ))| := hrewrite
-    _ ≤ Real.pi * ((k : ℝ) / (QPE.M m : ℝ)) := hmul
-    _ = Real.pi * (k : ℝ) / (QPE.M m : ℝ) := by ring
-
-theorem qaeGroverPlane_estimate_error_of_wrapped_neg_window
-    (m k : ℕ) {theta : ℝ} (y : Fin (QPE.M m))
-    (hclose : QPE.qpePhaseWindow m k (1 - theta / Real.pi) y) :
-    |estAmpEstimate (QPE.M m) (y : ℕ) - amplitudeFromAngle theta| ≤
-      theorem12ErrorBound (amplitudeFromAngle theta) (QPE.M m) k := by
-  have h := estAmp_error_from_phase_estimation_proved (M := QPE.M m) (k := k)
-    (a := amplitudeFromAngle (Real.pi - theta)) (theta := Real.pi - theta) (y := (y : ℕ))
-    (Nat.two_pow_pos m) rfl (phase_angle_error_of_wrapped_neg_window m k y hclose)
-  simpa [amplitudeFromAngle_pi_sub theta] using h
-
 /-- Outputs whose post-processed amplitude estimate satisfies the Theorem 12 error bound for `k`. -/
 def qaeGroverPlaneSuccessfulOutcomesK (m k : ℕ) (theta : ℝ) : Finset (Fin (QPE.M m)) := by
   classical
@@ -257,70 +87,6 @@ theorem mem_qaeGroverPlaneSuccessfulOutcomesK_of_estimate_error
   classical
   unfold qaeGroverPlaneSuccessfulOutcomesK
   simp [h]
-
-theorem qaeGroverPlane_pos_window_subset_success
-    (m k : ℕ) (theta : ℝ) :
-    QPE.qpePhaseWindowOutcomes m k (theta / Real.pi) ⊆
-      qaeGroverPlaneSuccessfulOutcomesK m k theta := by
-  intro y hy
-  exact mem_qaeGroverPlaneSuccessfulOutcomesK_of_estimate_error m k y
-    (estAmp_error_from_phase_estimation_proved (Nat.two_pow_pos m) rfl
-      (phase_angle_error_of_pos_window m k y
-        ((QPE.mem_qpePhaseWindowOutcomes_iff m k (theta / Real.pi) y).mp hy)))
-
-theorem qaeGroverPlane_wrapped_neg_window_subset_success
-    (m k : ℕ) (theta : ℝ) :
-    QPE.qpePhaseWindowOutcomes m k (1 - theta / Real.pi) ⊆
-      qaeGroverPlaneSuccessfulOutcomesK m k theta := by
-  intro y hy
-  exact mem_qaeGroverPlaneSuccessfulOutcomesK_of_estimate_error m k y
-    (qaeGroverPlane_estimate_error_of_wrapped_neg_window m k y
-      ((QPE.mem_qpePhaseWindowOutcomes_iff m k (1 - theta / Real.pi) y).mp hy))
-
-theorem qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_windows
-    (m k : ℕ) (theta : ℝ)
-    (hpos : theorem12SuccessProbability k ≤
-      QPE.qpePhaseWindowProbability m k (theta / Real.pi))
-    (hneg : theorem12SuccessProbability k ≤
-      QPE.qpePhaseWindowProbability m k (1 - theta / Real.pi)) :
-    theorem12SuccessProbability k ≤ qaeGroverPlaneSuccessProbabilityK m k theta := by
-  classical
-  let S := qaeGroverPlaneSuccessfulOutcomesK m k theta
-  let Ppos := fun y : Fin (QPE.M m) => QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y
-  let Pneg := fun y : Fin (QPE.M m) => QPE.qpeApproxOutcomeProbability m (1 - theta / Real.pi) y
-  have hsuccess_eq : qaeGroverPlaneSuccessProbabilityK m k theta =
-      (1 / 2 : ℝ) * (S.sum fun y => Ppos y) + (1 / 2 : ℝ) * (S.sum fun y => Pneg y) := by
-    unfold qaeGroverPlaneSuccessProbabilityK
-    dsimp [S, Ppos, Pneg]
-    simp_rw [qaeGroverPlaneMarginal_eq_wrapped]
-    rw [Finset.sum_add_distrib]
-    rw [Finset.mul_sum, Finset.mul_sum]
-  have hpos_subset : QPE.qpePhaseWindowOutcomes m k (theta / Real.pi) ⊆ S := by
-    dsimp [S]
-    exact qaeGroverPlane_pos_window_subset_success m k theta
-  have hneg_subset : QPE.qpePhaseWindowOutcomes m k (1 - theta / Real.pi) ⊆ S := by
-    dsimp [S]
-    exact qaeGroverPlane_wrapped_neg_window_subset_success m k theta
-  have hpos_sum_le : QPE.qpePhaseWindowProbability m k (theta / Real.pi) ≤ S.sum fun y => Ppos y := by
-    unfold QPE.qpePhaseWindowProbability
-    dsimp [Ppos]
-    exact Finset.sum_le_sum_of_subset_of_nonneg hpos_subset
-      (by intro y _hyS _hynot; exact QPE.qpeApproxOutcomeProbability_nonneg m (theta / Real.pi) y)
-  have hneg_sum_le : QPE.qpePhaseWindowProbability m k (1 - theta / Real.pi) ≤ S.sum fun y => Pneg y := by
-    unfold QPE.qpePhaseWindowProbability
-    dsimp [Pneg]
-    exact Finset.sum_le_sum_of_subset_of_nonneg hneg_subset
-      (by intro y _hyS _hynot; exact QPE.qpeApproxOutcomeProbability_nonneg m (1 - theta / Real.pi) y)
-  have hpos' : theorem12SuccessProbability k ≤ S.sum fun y => Ppos y := le_trans hpos hpos_sum_le
-  have hneg' : theorem12SuccessProbability k ≤ S.sum fun y => Pneg y := le_trans hneg hneg_sum_le
-  calc
-    theorem12SuccessProbability k =
-        (1 / 2 : ℝ) * theorem12SuccessProbability k +
-          (1 / 2 : ℝ) * theorem12SuccessProbability k := by ring
-    _ ≤ (1 / 2 : ℝ) * (S.sum fun y => Ppos y) + (1 / 2 : ℝ) * (S.sum fun y => Pneg y) := by
-      exact add_le_add (mul_le_mul_of_nonneg_left hpos' (by norm_num))
-        (mul_le_mul_of_nonneg_left hneg' (by norm_num))
-    _ = qaeGroverPlaneSuccessProbabilityK m k theta := by rw [hsuccess_eq]
 
 theorem amplitudeFromAngle_sub_pi (theta : ℝ) :
     amplitudeFromAngle (theta - Real.pi) = amplitudeFromAngle theta := by
@@ -543,16 +309,6 @@ theorem successProbability_eq_groverPlane {m k : ℕ} (inst : GeneralQAERealizat
   unfold successProbability qaeGroverPlaneSuccessProbabilityK
   rw [successfulOutcomes_eq_groverPlane]
   exact Finset.sum_congr rfl (fun y _hy => inst.outputProbability_eq_groverPlane y)
-
-theorem successProbability_lower_bound_of_qpe_windows
-    {m k : ℕ} (inst : GeneralQAERealization m)
-    (hpos : theorem12SuccessProbability k ≤
-      QPE.qpePhaseWindowProbability m k (inst.theta / Real.pi))
-    (hneg : theorem12SuccessProbability k ≤
-      QPE.qpePhaseWindowProbability m k (1 - inst.theta / Real.pi)) :
-    theorem12SuccessProbability k ≤ successProbability inst k := by
-  rw [successProbability_eq_groverPlane]
-  exact qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_windows m k inst.theta hpos hneg
 
 /-- General-realization QAE success probability, using the proved BHMT11 bound. -/
 theorem successProbability_lower_bound

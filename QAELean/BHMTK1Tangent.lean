@@ -578,10 +578,66 @@ theorem qpeCircularPhaseWindowProbability_lower_bound_k1
   rw [bhmt11SuccessProbability, if_pos rfl]
   by_cases hm0 : m = 0
   · subst m
-    exact qpeCircularPhaseWindowProbability_lower_bound_k1_m_zero h0 h1
+    let y := zeroIndex 0
+    have hprob_one : qpeApproxOutcomeProbability 0 theta y = 1 := by
+      unfold qpeApproxOutcomeProbability
+      rw [qpeApproxAmplitude_eq_normalized_phase_sum]
+      simp [M, y, zeroIndex]
+    have hywin : y ∈ qpeCircularPhaseWindowOutcomes 0 1 theta := by
+      apply (mem_qpeCircularPhaseWindowOutcomes_iff 0 1 theta y).mpr
+      unfold qpeCircularPhaseWindow
+      have hdist : unitPhaseDistance theta (((y : ℕ) : ℝ) / (M 0 : ℝ)) ≤ 1 := by
+        exact le_trans (unitPhaseDistance_le_abs_sub theta (((y : ℕ) : ℝ) / (M 0 : ℝ))) (by
+          dsimp [y, zeroIndex, M]
+          simpa [abs_of_nonneg h0] using h1)
+      simpa [M] using hdist
+    unfold qpeCircularPhaseWindowProbability
+    have hsingle : qpeApproxOutcomeProbability 0 theta y ≤
+        (qpeCircularPhaseWindowOutcomes 0 1 theta).sum
+          (fun z => qpeApproxOutcomeProbability 0 theta z) :=
+      Finset.single_le_sum (fun z _hz => qpeApproxOutcomeProbability_nonneg 0 theta z) hywin
+    rw [hprob_one] at hsingle
+    have h8_le_one : 8 / Real.pi ^ 2 ≤ 1 := by
+      have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
+      have hpi_sq_ge_eight : 8 ≤ Real.pi ^ 2 := by
+        nlinarith [Real.pi_gt_three]
+      exact (div_le_one hpi_sq_pos).mpr hpi_sq_ge_eight
+    exact le_trans h8_le_one hsingle
   by_cases htheta1 : theta = 1
   · subst theta
-    exact qpeCircularPhaseWindowProbability_lower_bound_k1_theta_one m
+    let y := zeroIndex m
+    have hprob_zero : qpeApproxOutcomeProbability m 0 y = 1 := by
+      have hclose : |(0 : ℝ) - (((y : ℕ) : ℝ) / (M m : ℝ))| ≤
+          1 / (2 * (M m : ℝ)) := by
+        dsimp [y, zeroIndex]
+        simp
+      have hgeom := qpeApproxOutcomeProbability_eq_geometric_of_nearest m 0 y hclose
+      rw [hgeom]
+      simp [qpeApproxGeometricProbability, y, zeroIndex]
+    have hprob_one : qpeApproxOutcomeProbability m 1 y = 1 := by
+      have hperiod : qpeApproxOutcomeProbability m 1 y = qpeApproxOutcomeProbability m (1 - 1) y := by
+        have h := qpeApproxOutcomeProbability_add_one m (1 - 1) y
+        have harg : (1 : ℝ) - 1 + 1 = 1 := by ring_nf
+        simpa [harg] using h
+      rw [hperiod]
+      simpa using hprob_zero
+    have hywin : y ∈ qpeCircularPhaseWindowOutcomes m 1 1 := by
+      apply (mem_qpeCircularPhaseWindowOutcomes_iff m 1 1 y).mpr
+      unfold qpeCircularPhaseWindow unitPhaseDistance
+      dsimp [y, zeroIndex]
+      simp
+    unfold qpeCircularPhaseWindowProbability
+    have hsingle : qpeApproxOutcomeProbability m 1 y ≤
+        (qpeCircularPhaseWindowOutcomes m 1 1).sum
+          (fun z => qpeApproxOutcomeProbability m 1 z) :=
+      Finset.single_le_sum (fun z _hz => qpeApproxOutcomeProbability_nonneg m 1 z) hywin
+    rw [hprob_one] at hsingle
+    have h8_le_one : 8 / Real.pi ^ 2 ≤ 1 := by
+      have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
+      have hpi_sq_ge_eight : 8 ≤ Real.pi ^ 2 := by
+        nlinarith [Real.pi_gt_three]
+      exact (div_le_one hpi_sq_pos).mpr hpi_sq_ge_eight
+    exact le_trans h8_le_one hsingle
   have htheta_lt : theta < 1 := lt_of_le_of_ne h1 htheta1
   by_cases hxzero : qpeFractionalOffset m theta = 0
   · exact qpeCircularPhaseWindowProbability_lower_bound_k1_exactGrid_of_mem_Ico

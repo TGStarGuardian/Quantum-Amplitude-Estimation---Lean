@@ -72,34 +72,36 @@ theorem qaePlaneVector_eq_eigen_superposition (theta : ℝ) :
     rw [invSqrt2_mul_self]
     ring
 
-/-- QPE is linear on a two-term target-state superposition.  The phase argument
-of `approxQPEStateConcrete` is ignored by the matrix pipeline, so each branch can
-be assigned the eigenphase used to rewrite it. -/
+/-- QPE is linear on a two-term target-state superposition. -/
 theorem qpeOutputStateConcrete_linear_combination {n m : ℕ} {U : Square n}
-    {ψ φ : Vector n} (a b : ℂ) (theta thetaψ thetaφ : ℝ) :
-    QPE.approxQPEStateConcrete (m := m) (U := U) (ψ := a • ψ + b • φ) theta =
-      a • QPE.approxQPEStateConcrete (m := m) (U := U) (ψ := ψ) thetaψ +
-        b • QPE.approxQPEStateConcrete (m := m) (U := U) (ψ := φ) thetaφ := by
-  unfold QPE.approxQPEStateConcrete
+    {ψ φ : Vector n} (a b : ℂ) :
+    (QPE.inverseQFTMatrix m ⊗ (I n)) ⬝
+        (QPE.controlledPowerMatrix m U ⬝ (QPE.uniformState m ⊗ (a • ψ + b • φ))) =
+      a • ((QPE.inverseQFTMatrix m ⊗ (I n)) ⬝
+        (QPE.controlledPowerMatrix m U ⬝ (QPE.uniformState m ⊗ ψ))) +
+        b • ((QPE.inverseQFTMatrix m ⊗ (I n)) ⬝
+          (QPE.controlledPowerMatrix m U ⬝ (QPE.uniformState m ⊗ φ))) := by
   simp [Matrix.kron_add_right, Matrix.kron_smul_right]
 
 /-- QPE applied to the initial QAE plane state is the corresponding linear
 superposition of the two QPE eigenphase output states. -/
 theorem qpeOutput_groverPlane_initial_eq_eigenphase_superposition
     (m : ℕ) (theta : ℝ) :
-    QPE.approxQPEStateConcrete (m := m) (U := groverPlaneRotation theta)
-        (ψ := QuantumLibrary.qaePlaneVector theta) (0 : ℝ) =
+    (QPE.inverseQFTMatrix m ⊗ (I 2)) ⬝
+        (QPE.controlledPowerMatrix m (groverPlaneRotation theta) ⬝
+          (QPE.uniformState m ⊗ QuantumLibrary.qaePlaneVector theta)) =
       qaeCoeffPlus theta •
           ((QPE.inverseQFTMatrix m ⬝ QPE.phaseState m (theta / Real.pi)) ⊗ planeEigenPlus) +
         qaeCoeffMinus theta •
           ((QPE.inverseQFTMatrix m ⬝ QPE.phaseState m (-(theta / Real.pi))) ⊗ planeEigenMinus) := by
   rw [qaePlaneVector_eq_eigen_superposition]
-  rw [qpeOutputStateConcrete_linear_combination
-    (theta := 0) (thetaψ := theta / Real.pi) (thetaφ := -(theta / Real.pi))]
-  rw [QPE.approxQPEStateConcrete_eq_distribution_tensor_eigenstate
+  rw [qpeOutputStateConcrete_linear_combination]
+  rw [QPE.controlledPowerMatrix_mul_uniform_of_real_eigenphase
     (groverPlaneRotation_eigen_plus theta)]
-  rw [QPE.approxQPEStateConcrete_eq_distribution_tensor_eigenstate
+  rw [QPE.controlledPowerMatrix_mul_uniform_of_real_eigenphase
     (groverPlaneRotation_eigen_minus theta)]
+  rw [Matrix.kron_mul, Matrix.kron_mul]
+  simp [Matrix.mul]
 
 /-- Counting-register marginal probability for a joint QPE state. -/
 def qpeCountingMarginal {n m : ℕ} (state : Vector (QPE.M m * n)) (y : Fin (QPE.M m)) : ℝ :=
@@ -139,8 +141,9 @@ the average of the two QPE eigenphase distributions. -/
 theorem qpeCountingMarginal_groverPlane_initial
     (m : ℕ) (theta : ℝ) (y : Fin (QPE.M m)) :
     qpeCountingMarginal
-        (QPE.approxQPEStateConcrete (m := m) (U := groverPlaneRotation theta)
-          (ψ := QuantumLibrary.qaePlaneVector theta) (0 : ℝ)) y =
+        ((QPE.inverseQFTMatrix m ⊗ (I 2)) ⬝
+          (QPE.controlledPowerMatrix m (groverPlaneRotation theta) ⬝
+            (QPE.uniformState m ⊗ QuantumLibrary.qaePlaneVector theta))) y =
       (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y +
         (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (-(theta / Real.pi)) y := by
   unfold qpeCountingMarginal
