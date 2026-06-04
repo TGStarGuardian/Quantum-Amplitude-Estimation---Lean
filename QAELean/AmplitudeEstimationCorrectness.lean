@@ -322,7 +322,6 @@ theorem qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_windows
         (mul_le_mul_of_nonneg_left hneg' (by norm_num))
     _ = qaeGroverPlaneSuccessProbabilityK m k theta := by rw [hsuccess_eq]
 
-
 theorem amplitudeFromAngle_sub_pi (theta : ℝ) :
     amplitudeFromAngle (theta - Real.pi) = amplitudeFromAngle theta := by
   unfold amplitudeFromAngle
@@ -406,7 +405,6 @@ theorem qaeGroverPlane_estimate_error_of_wrapped_neg_circular_window
   have h := estAmp_error_of_phase_circular_window (m := m) (k := k)
     (alpha := Real.pi - theta) y (by simpa [hphase] using hclose)
   simpa [amplitudeFromAngle_pi_sub theta] using h
-
 
 theorem qaeGroverPlane_pos_circular_window_subset_success
     (m k : ℕ) (theta : ℝ) :
@@ -497,7 +495,6 @@ theorem qaeGroverPlaneSuccessProbabilityK_lower_bound
     simpa [QPE.bhmt11SuccessProbability, theorem12SuccessProbability] using hnegQ
   exact qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_circular_windows m k theta hposQ' hnegQ'
 
-
 /-- Canonical Grover-plane QAE succeeds with Theorem 12 probability and uses
 exactly `M = 2^m` controlled Grover powers. -/
 theorem qaeGroverPlaneCorrectness_and_query_count
@@ -506,7 +503,6 @@ theorem qaeGroverPlaneCorrectness_and_query_count
     theorem12SuccessProbability k ≤ qaeGroverPlaneSuccessProbabilityK m k theta ∧
       QPE.M m = QPE.M m := by
   exact ⟨qaeGroverPlaneSuccessProbabilityK_lower_bound m k htheta0 htheta_pi hk, rfl⟩
-
 
 /-- A general amplitude-estimation instance whose observed counting-register
 semantics has been reduced to the canonical Grover plane.  This is the explicit
@@ -558,7 +554,6 @@ theorem successProbability_lower_bound_of_qpe_windows
   rw [successProbability_eq_groverPlane]
   exact qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_windows m k inst.theta hpos hneg
 
-
 /-- General-realization QAE success probability, using the proved BHMT11 bound. -/
 theorem successProbability_lower_bound
     {m k : ℕ} (inst : GeneralQAERealization m)
@@ -582,7 +577,6 @@ theorem oracleEvaluations_exact {m : ℕ} (inst : GeneralQAERealization m) :
   inst.oracleEvaluations_eq
 
 end GeneralQAERealization
-
 
 end Grover
 end QAE

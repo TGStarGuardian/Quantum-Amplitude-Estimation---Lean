@@ -295,7 +295,6 @@ theorem floorGridIndexNat_lt_M_of_mem_Ico
     nlinarith [hMpos, h1]
   exact (Nat.floor_lt hx_nonneg).mpr hx_lt
 
-
 /-- If the fractional offset vanishes, the phase is exactly the lower grid point. -/
 theorem theta_eq_floorGrid_div_of_qpeFractionalOffset_eq_zero
     (m : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (hx : qpeFractionalOffset m theta = 0) :
@@ -548,7 +547,6 @@ theorem qpeCircularFailure_phase_error_representative
         linarith
       · exact lt_of_lt_of_le hfail (unitPhaseDistance_le_add_one theta grid)
 
-
 private theorem fin_eq_left_or_right_candidate_of_abs_sub_mem_Ico
     {N : ℕ} (hN : 0 < N) {x : ℝ} {i : ℕ} {y : Fin N} {z : ℤ}
     (hmod : ((y : ℕ) : ℤ) ≡ z [ZMOD (N : ℤ)])
@@ -599,13 +597,10 @@ private theorem fin_eq_left_or_right_candidate_of_abs_sub_mem_Ico
     right
     exact zmod_val_eq_of_modEq (by simpa [hz] using hmod)
 
-
 /-- BHMT tail bucket for a QPE outcome: the integer part of the circular phase error measured in grid units.  For a failed outcome this bucket is at least `k`,
 which matches the inverse-square tail in Theorem 11. -/
 def qpeCircularDistanceBucket (m : ℕ) (theta : ℝ) (y : Fin (M m)) : ℕ :=
   Nat.floor ((M m : ℝ) * unitPhaseDistance theta (((y : ℕ) : ℝ) / (M m : ℝ)))
-
-
 
 theorem qpeCircularDistanceBucket_mem_tail_of_failure
     (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1)
@@ -736,7 +731,6 @@ theorem half_inv_sq_tail_sum_le (k n : ℕ) (hk : 1 < k) :
           rw [hk1]
           field_simp [show (2 : ℝ) ≠ 0 by norm_num]
 
-
 /-- The QPE phase-kickback state is periodic with period one in the eigenphase. -/
 theorem phaseState_add_one (m : ℕ) (theta : ℝ) :
     phaseState m (theta + 1) = phaseState m theta := by
@@ -789,7 +783,6 @@ def qpeApproxGeometricProbability (N : ℕ) (delta : ℝ) : ℝ :=
   else
     (Real.sin (Real.pi * (N : ℝ) * delta) /
       ((N : ℝ) * Real.sin (Real.pi * delta))) ^ 2
-
 
 /-- Modular finite-tail summation step for the BHMT11 `k > 1` failure bound.
 
@@ -891,8 +884,6 @@ theorem bhmtK1TwoNearestCore_half : bhmtK1TwoNearestCore (1 / 2) = 8 := by
   rw [harg, Real.sin_pi_div_two]
   norm_num
 
-
-
 /-- Monotonicity on the left half, together with symmetry, gives the global `8`
 lower bound.  This is the correct replacement for the false global-convexity
 claim: the core function is decreasing on `(0, 1 / 2]` and then increasing by
@@ -965,8 +956,6 @@ theorem deriv_bhmtK1TwoNearestCore
   simp
   field_simp [hx0, hx1]
 
-
-
 /-- Derivative-sign reduction for the left-half monotonicity statement.  The only
 remaining real-analysis content is to prove the displayed derivative is nonpositive
 on `(0, 1 / 2)`. -/
@@ -1002,8 +991,6 @@ theorem bhmtK1TwoNearestCore_antitone_left_of_deriv_nonpos
   · intro x hx
     rw [interior_Ioc] at hx
     exact hderiv x hx
-
-
 
 theorem qpeApproxGeometricProbability_neg (N : ℕ) (delta : ℝ) :
     qpeApproxGeometricProbability N (-delta) = qpeApproxGeometricProbability N delta := by
@@ -1083,22 +1070,6 @@ theorem qpeApproxGeometricProbability_two_nearest_lower_bound_of_core
   rw [hcore]
   exact add_le_add hleft hright_pos
 
-
-
-/-- Conditional `k = 1` two-nearest geometric lower bound from left-half
-monotonicity of the core real function. -/
-theorem qpeApproxGeometricProbability_two_nearest_lower_bound_k1_of_core_antitone_left
-    {N : ℕ} {x : ℝ}
-    (hanti : AntitoneOn bhmtK1TwoNearestCore (Set.Ioc (0 : ℝ) (1 / 2)))
-    (hN : 0 < N) (hx0 : 0 < x) (hx1 : x < 1) :
-    8 / Real.pi ^ 2 ≤
-      qpeApproxGeometricProbability N (x / (N : ℝ)) +
-        qpeApproxGeometricProbability N (-(1 - x) / (N : ℝ)) := by
-  have hcore := qpeApproxGeometricProbability_two_nearest_lower_bound_of_core (N := N) hN hx0 hx1
-  have h8 := bhmtK1TwoNearestCore_ge_eight_of_antitone_left hanti hx0 hx1
-  have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
-  exact le_trans (div_le_div_of_nonneg_right h8 hpi_sq_pos.le) hcore
-
 /-- If two distinct outcomes are in a circular success window, then any lower bound
 on their combined probability is also a lower bound on the whole window probability. -/
 theorem qpeCircularPhaseWindowProbability_lower_bound_two_outcomes
@@ -1131,29 +1102,6 @@ theorem qpeCircularPhaseWindowProbability_lower_bound_two_outcomes
   unfold qpeCircularPhaseWindowProbability
   rw [hpair_sum] at hpair_le_window
   exact le_trans hprob hpair_le_window
-
-/-- `k = 1` circular-window lower bound from two explicitly identified adjacent
-outcomes.  This packages the already-proved two-nearest geometric estimate with
-the finset/probability bookkeeping for the circular window; the real core
-inequality remains isolated in `hanti`. -/
-theorem qpeCircularPhaseWindowProbability_lower_bound_k1_of_two_adjacent_geometric
-    (m : ℕ) {theta x : ℝ} (y₀ y₁ : Fin (M m))
-    (hanti : AntitoneOn bhmtK1TwoNearestCore (Set.Ioc (0 : ℝ) (1 / 2)))
-    (hx₀ : 0 < x) (hx₁ : x < 1)
-    (hy₀win : y₀ ∈ qpeCircularPhaseWindowOutcomes m 1 theta)
-    (hy₁win : y₁ ∈ qpeCircularPhaseWindowOutcomes m 1 theta)
-    (hy₀₁ : y₀ ≠ y₁)
-    (hprob₀ : qpeApproxOutcomeProbability m theta y₀ =
-      qpeApproxGeometricProbability (M m) (x / (M m : ℝ)))
-    (hprob₁ : qpeApproxOutcomeProbability m theta y₁ =
-      qpeApproxGeometricProbability (M m) (-(1 - x) / (M m : ℝ))) :
-    8 / Real.pi ^ 2 ≤ qpeCircularPhaseWindowProbability m 1 theta := by
-  have hgeom := qpeApproxGeometricProbability_two_nearest_lower_bound_k1_of_core_antitone_left
-    (N := M m) (x := x) hanti (Nat.two_pow_pos m) hx₀ hx₁
-  apply qpeCircularPhaseWindowProbability_lower_bound_two_outcomes
-    (m := m) (k := 1) (theta := theta) (y₀ := y₀) (y₁ := y₁)
-    hy₀win hy₁win hy₀₁
-  simpa [hprob₀, hprob₁] using hgeom
 
 /-- The controlled-power operator `Σ_k |k⟩⟨k| ⊗ U^k`.
 
@@ -1243,7 +1191,6 @@ theorem matrix_isUnitary_pow {n : ℕ} {U : Square n} (hU : Matrix.isUnitary U) 
       rw [pow_succ']
       change Matrix.isUnitary (U ⬝ (U ^ k))
       exact Matrix.isUnitary_mul hU ih
-
 
 /-- The block-diagonal controlled-power matrix is unitary whenever the target
 unitary `U` is unitary. -/
@@ -1463,7 +1410,6 @@ theorem controlledPowerMatrix_mul_uniform_of_eigenphase {n : ℕ} {m : ℕ}
     controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ) = fourierState m y ⊗ ψ := by
   exact controlledPowerMatrix_mul_uniform_of_power_action
     (controlled_power_eigenphase_action h)
-
 
 /-- Controlled powers produce the kicked-back phase state for an arbitrary real eigenphase. -/
 theorem controlledPowerMatrix_mul_uniform_of_real_power_action {n : ℕ} {m : ℕ}
@@ -1801,7 +1747,6 @@ structure InverseQFTMatrixCorrect (m : ℕ) where
   isUnitary : Matrix.isUnitary (inverseQFTMatrix m)
   maps_fourierState : ∀ y : Fin (M m), inverseQFTMatrix m ⬝ fourierState m y = Vector.basis y
 
-
 /-- If the concrete QFT matrix is unitary, then the concrete inverse-QFT matrix
 satisfies the exact inverse-QFT contract required by QPE. -/
 def inverseQFTMatrixCorrectOfQFTUnitary {m : ℕ}
@@ -1867,7 +1812,6 @@ theorem qpeCircularPhaseWindowFailureProbability_eq_one_sub_success
       1 - qpeCircularPhaseWindowProbability m k theta := by
   have h := qpeCircularPhaseWindowProbability_add_failure_eq_one m k theta
   linarith
-
 
 /-- Specification for an inverse QFT on `m` qubits.  This is the exact property
 needed by QPE. -/
@@ -2119,7 +2063,6 @@ theorem sin_pi_lower_of_scaled_distance_le_abs
       field_simp [Real.pi_ne_zero]
     _ ≤ |Real.sin (Real.pi * delta)| := hsin_lower
 
-
 /-- Absolute sine is invariant under subtracting one full phase turn inside
 `sin (π * ·)`. -/
 theorem abs_sin_pi_mul_sub_one (delta : ℝ) :
@@ -2189,7 +2132,6 @@ theorem sin_pi_ne_zero_of_qpeCircularFailure
   have hspos : 0 < |Real.sin (Real.pi * (theta - (((y : ℕ) : ℝ) / (M m : ℝ))))| :=
     lt_of_lt_of_le hleft_pos hsin
   exact abs_pos.mp hspos
-
 
 /-- A failed outcome's real circular-distance bucket gives a sine-denominator
 lower bound for a wrapped phase-error representative. -/
@@ -2334,8 +2276,6 @@ theorem qpeApproxOutcomeProbability_failure_upper_bound_distanceBucket
   have hden := sin_pi_ne_zero_of_qpeCircularFailure_distanceBucket m k h0 h1 hy hbpos
   exact qpeApproxOutcomeProbability_upper_bound_of_sin_lower
     m (qpeCircularDistanceBucket m theta y) theta y hbpos hden hsin
-
-
 
 /-- An outcome in a fixed circular-distance bucket is one of the two residue
 classes at that integer distance from `M * theta`: the class of
@@ -2504,7 +2444,6 @@ theorem qpeCircularDistanceBucket_filter_card_le_two
     · simp [left, h]
     · simp [right, h]
   exact le_trans (Finset.card_le_card hsubset) Finset.card_le_two
-
 
 /-- BHMT11 `k > 1` failure bound with the distance-bucket cardinality fact proved. -/
 theorem qpeCircularFailureProbability_le_k_gt_one

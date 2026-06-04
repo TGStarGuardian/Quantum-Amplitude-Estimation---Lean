@@ -134,7 +134,6 @@ theorem groverPlane_two_branch_normSq_sum_coeff
   rw [hleft]
   rw [Complex.normSq_mul, Complex.normSq_mul, hcp, hcm]
 
-
 /-- The counting-register marginal of QPE on the initial Grover-plane state is
 the average of the two QPE eigenphase distributions. -/
 theorem qpeCountingMarginal_groverPlane_initial
@@ -153,7 +152,6 @@ theorem qpeCountingMarginal_groverPlane_initial
   · ring_nf
   · exact qaeCoeffPlus_normSq theta
   · exact qaeCoeffMinus_normSq theta
-
 
 end Grover
 end QAE

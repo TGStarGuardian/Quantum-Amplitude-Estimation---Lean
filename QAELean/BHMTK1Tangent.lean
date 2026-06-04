@@ -140,7 +140,6 @@ lemma bhmtInvNatSuccMulSuccSucc_hasSum :
     ∑ n ∈ Finset.range N, 1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ))
   rw [bhmtInvNatSuccMulSuccSucc_sum_telescope]
 
-
 /-- The odd-denominator tail appearing in the tangent partial-fraction proof of the
 BHMT `k = 1` core inequality.  Index `n` represents the paper's integer `n + 2`,
 so this is the sum over `n ≥ 2`. -/
@@ -249,7 +248,6 @@ lemma bhmtTanOddTail_tsum_le {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
             1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ))) := hfactor
     _ ≤ (1 / (2 * (1 + u ^ 2))) * 1 := by gcongr
     _ = 1 / (2 * (1 + u ^ 2)) := by ring
-
 
 /-- Real cotangent-series term specialized to `z = (1 - u) / 2`. -/
 def bhmtRealCotTerm (u : ℝ) (n : ℕ) : ℝ :=
@@ -399,8 +397,6 @@ lemma bhmtHalfOneMinus_mem_integerComplement {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u 
   have hnreal_ge_one : (1 : ℝ) ≤ n := by exact_mod_cast hn_ge_one
   nlinarith
 
-
-
 lemma bhmtCot_half_one_minus_eq_tan {u : ℝ} :
     Real.cot (Real.pi * ((1 - u) / 2)) = Real.tan (Real.pi * u / 2) := by
   rw [Real.cot_eq_cos_div_sin, Real.tan_eq_sin_div_cos]
@@ -457,8 +453,6 @@ theorem bhmtTanPartialFractionIdentity_of_bounds {u : ℝ} (hu0 : 0 ≤ u) (hu1 
   rw [hmain]
   rw [bhmtTan_base_poles hu0 hu1]
 
-
-
 /-- Reparametrized derivative identity for the two-nearest `k = 1` core.
 With `u = 1 - 2x`, the derivative in `x` is a negative factor times the
 logarithmic derivative in the tangent-series proof. -/
@@ -495,9 +489,6 @@ lemma deriv_bhmtK1TwoNearestCore_eq_neg_log_factor
   field_simp [hx0, hx1, hdenA, hdenB, hcospos.ne']
   ring_nf
 
-
-
-
 lemma bhmt_log_derivative_expr_nonneg_of_tan_series
     {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1)
     (htan : bhmtTanPartialFractionIdentity u) :
@@ -519,7 +510,6 @@ lemma bhmt_log_derivative_expr_nonneg_of_tan_series
   rw [htan]
   ring_nf
   simpa [div_eq_mul_inv, mul_comm, mul_left_comm, mul_assoc] using hnonneg
-
 
 /-- Unconditional derivative sign for the BHMT `k = 1` two-nearest core. -/
 theorem bhmtK1TwoNearestCore_deriv_nonpos :
@@ -547,6 +537,40 @@ theorem bhmtK1TwoNearestCore_deriv_nonpos :
   rw [hderiv]
   simpa [u] using hprod
 
+/-- Unconditional `k = 1` two-nearest geometric lower bound, using the proved
+left-half monotonicity of the core real function. -/
+theorem qpeApproxGeometricProbability_two_nearest_lower_bound_k1_of_core_antitone_left
+    {N : ℕ} {x : ℝ} (hN : 0 < N) (hx0 : 0 < x) (hx1 : x < 1) :
+    8 / Real.pi ^ 2 ≤
+      qpeApproxGeometricProbability N (x / (N : ℝ)) +
+        qpeApproxGeometricProbability N (-(1 - x) / (N : ℝ)) := by
+  have hanti : AntitoneOn bhmtK1TwoNearestCore (Set.Ioc (0 : ℝ) (1 / 2)) :=
+    bhmtK1TwoNearestCore_antitone_left_of_deriv_nonpos bhmtK1TwoNearestCore_deriv_nonpos
+  have hcore := qpeApproxGeometricProbability_two_nearest_lower_bound_of_core (N := N) hN hx0 hx1
+  have h8 := bhmtK1TwoNearestCore_ge_eight_of_antitone_left hanti hx0 hx1
+  have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
+  exact le_trans (div_le_div_of_nonneg_right h8 hpi_sq_pos.le) hcore
+
+/-- `k = 1` circular-window lower bound from two explicitly identified adjacent
+outcomes, using the proved two-nearest geometric estimate. -/
+theorem qpeCircularPhaseWindowProbability_lower_bound_k1_of_two_adjacent_geometric
+    (m : ℕ) {theta x : ℝ} (y₀ y₁ : Fin (M m))
+    (hx₀ : 0 < x) (hx₁ : x < 1)
+    (hy₀win : y₀ ∈ qpeCircularPhaseWindowOutcomes m 1 theta)
+    (hy₁win : y₁ ∈ qpeCircularPhaseWindowOutcomes m 1 theta)
+    (hy₀₁ : y₀ ≠ y₁)
+    (hprob₀ : qpeApproxOutcomeProbability m theta y₀ =
+      qpeApproxGeometricProbability (M m) (x / (M m : ℝ)))
+    (hprob₁ : qpeApproxOutcomeProbability m theta y₁ =
+      qpeApproxGeometricProbability (M m) (-(1 - x) / (M m : ℝ))) :
+    8 / Real.pi ^ 2 ≤ qpeCircularPhaseWindowProbability m 1 theta := by
+  have hgeom := qpeApproxGeometricProbability_two_nearest_lower_bound_k1_of_core_antitone_left
+    (N := M m) (x := x) (Nat.two_pow_pos m) hx₀ hx₁
+  apply qpeCircularPhaseWindowProbability_lower_bound_two_outcomes
+    (m := m) (k := 1) (theta := theta) (y₀ := y₀) (y₁ := y₁)
+    hy₀win hy₁win hy₀₁
+  simpa [hprob₀, hprob₁] using hgeom
+
 /-- Unconditional BHMT11 `k = 1` circular-window probability bound. -/
 theorem qpeCircularPhaseWindowProbability_lower_bound_k1
     (m : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1) :
@@ -567,12 +591,10 @@ theorem qpeCircularPhaseWindowProbability_lower_bound_k1
     have hxlt : qpeFractionalOffset m theta < 1 :=
       Int.fract_lt_one ((M m : ℝ) * theta)
     have hmpos : 0 < m := Nat.pos_of_ne_zero hm0
-    have hanti := bhmtK1TwoNearestCore_antitone_left_of_deriv_nonpos
-      bhmtK1TwoNearestCore_deriv_nonpos
     exact qpeCircularPhaseWindowProbability_lower_bound_k1_of_two_adjacent_geometric
       (m := m) (theta := theta) (x := qpeFractionalOffset m theta)
       (y₀ := qpeLowerAdjacentOutcome m theta) (y₁ := qpeUpperAdjacentOutcome m theta)
-      hanti hxpos hxlt
+      hxpos hxlt
       (qpeLowerAdjacentOutcome_mem_circularWindow_one_of_mem_Ico m h0 htheta_lt)
       (qpeUpperAdjacentOutcome_mem_circularWindow_one_of_mem_Ico m h0 htheta_lt)
       (qpeAdjacentOutcomes_ne_of_pos_m m hmpos h0 htheta_lt)
@@ -590,8 +612,6 @@ theorem bhmt11CircularWindowBound_proved : BHMT11CircularWindowBound := by
     exact qpeCircularPhaseWindowProbability_lower_bound_k1 m h0 h1
   · have hkgt : 1 < k := by omega
     exact qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k h0 h1 hkgt
-
-
 
 lemma bhmtInvNatSuccMulSuccSucc_tsum :
     (∑' n : ℕ, 1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ))) = 1 := by
