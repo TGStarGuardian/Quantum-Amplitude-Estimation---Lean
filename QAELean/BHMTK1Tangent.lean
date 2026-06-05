@@ -10,22 +10,6 @@ open Filter
 namespace QAE
 namespace QPE
 
-lemma cotTerm_realPart (z : ℝ) (n : ℕ) :
-    (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))).re =
-      1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ)) := by
-  have hcomplex :
-      1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1)) =
-        ((1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
-    have hsub : (z : ℂ) - (n + 1) = ((z - ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
-      norm_num
-    have hadd : (z : ℂ) + (n + 1) = ((z + ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
-      norm_num
-    rw [hsub, hadd]
-    simp [one_div, Complex.ofReal_inv]
-  change (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))).re =
-    ((1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ).re
-  exact congrArg Complex.re hcomplex
-
 /-- Real-valued cotangent Mittag-Leffler expansion obtained from Mathlib's complex
 `cot_series_rep'` by taking real parts. -/
 lemma real_cot_series_rep' {z : ℝ} (hz : (z : ℂ) ∈ Complex.integerComplement) :
@@ -56,7 +40,20 @@ lemma real_cot_series_rep' {z : ℝ} (hz : (z : ℂ) ∈ Complex.integerCompleme
       ∑' n : ℕ, (1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ))) by
         apply tsum_congr
         intro n
-        simpa using cotTerm_realPart z n] at hre
+        have hcomplex :
+            1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1)) =
+              ((1 / (z - ((n + 1 : ℕ) : ℝ)) +
+                1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
+          have hsub : (z : ℂ) - (n + 1) = ((z - ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
+            norm_num
+          have hadd : (z : ℂ) + (n + 1) = ((z + ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
+            norm_num
+          rw [hsub, hadd]
+          simp [one_div, Complex.ofReal_inv]
+        change (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))).re =
+          ((1 / (z - ((n + 1 : ℕ) : ℝ)) +
+            1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ).re
+        exact congrArg Complex.re hcomplex] at hre
   exact hre
 
 lemma bhmtTanOddTail_term_bound {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) (n : ℕ) :
@@ -101,22 +98,6 @@ lemma bhmtInvNatSuccMulSuccSucc_sum_telescope (N : ℕ) :
       field_simp [show ((N + 1 : ℕ) : ℝ) ≠ 0 by positivity,
         show ((N + 2 : ℕ) : ℝ) ≠ 0 by positivity]
       ring_nf
-
-lemma bhmtInvNatSuccMulSuccSucc_hasSum :
-    HasSum (fun n : ℕ => 1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ))) 1 := by
-  rw [hasSum_iff_tendsto_nat_of_nonneg (fun n => by positivity) 1]
-  have hlim_inv : Tendsto (fun N : ℕ => (1 / ((N + 1 : ℕ) : ℝ))) atTop (𝓝 (0 : ℝ)) := by
-    simpa [Nat.cast_add, add_comm] using
-      (@tendsto_one_div_add_atTop_nhds_zero_nat ℝ _ _ _ _)
-  have hlim : Tendsto (fun N : ℕ => 1 - 1 / ((N + 1 : ℕ) : ℝ)) atTop (𝓝 (1 - 0)) :=
-    tendsto_const_nhds.sub hlim_inv
-  have hlim' : Tendsto (fun N : ℕ => 1 - 1 / ((N + 1 : ℕ) : ℝ)) atTop (𝓝 (1 : ℝ)) := by
-    simpa using hlim
-  refine hlim'.congr' (Eventually.of_forall ?_)
-  intro N
-  change 1 - 1 / ((N + 1 : ℕ) : ℝ) =
-    ∑ n ∈ Finset.range N, 1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ))
-  rw [bhmtInvNatSuccMulSuccSucc_sum_telescope]
 
 /-- The odd-denominator tail appearing in the tangent partial-fraction proof of the
 BHMT `k = 1` core inequality.  Index `n` represents the paper's integer `n + 2`,
@@ -248,7 +229,20 @@ lemma bhmtRealCotTerm_summable {z : ℝ}
   have hsre := hs.map Complex.reCLM Complex.reCLM.continuous
   refine hsre.congr ?_
   intro n
-  exact cotTerm_realPart z n
+  have hcomplex :
+      1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1)) =
+        ((1 / (z - ((n + 1 : ℕ) : ℝ)) +
+          1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
+    have hsub : (z : ℂ) - (n + 1) = ((z - ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
+      norm_num
+    have hadd : (z : ℂ) + (n + 1) = ((z + ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
+      norm_num
+    rw [hsub, hadd]
+    simp [one_div, Complex.ofReal_inv]
+  change (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))).re =
+    ((1 / (z - ((n + 1 : ℕ) : ℝ)) +
+      1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ).re
+  exact congrArg Complex.re hcomplex
 
 lemma bhmtRealCotTerm_summable_of_bounds {u : ℝ} (_hu0 : 0 ≤ u) (_hu1 : u < 1)
     (hz : (((1 - u) / 2 : ℝ) : ℂ) ∈ Complex.integerComplement) :
@@ -645,10 +639,6 @@ theorem bhmt11CircularWindowBound_proved : BHMT11CircularWindowBound := by
     exact qpeCircularPhaseWindowProbability_lower_bound_k1 m h0 h1
   · have hkgt : 1 < k := by omega
     exact qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k h0 h1 hkgt
-
-lemma bhmtInvNatSuccMulSuccSucc_tsum :
-    (∑' n : ℕ, 1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ))) = 1 := by
-  exact bhmtInvNatSuccMulSuccSucc_hasSum.tsum_eq
 
 end QPE
 end QAE

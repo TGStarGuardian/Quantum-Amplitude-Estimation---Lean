@@ -1,5 +1,167 @@
+import Mathlib
 import QAELean.GroverQAESuperposition
 import QAELean.BHMTK1Tangent
+
+/-!
+# Quantum amplitude estimation
+
+This file formalizes the parts of Brassard, Hoyer, Mosca, and Tapp,
+"Quantum Amplitude Amplification and Estimation", that are essential for
+quantum amplitude estimation.
+
+The paper's QAE proof has two layers:
+
+* the quantum layer prepares a phase-estimation sample for the Grover iterate
+  `Q = -A S0 A^{-1} Sχ`;
+* the analytic layer converts a phase error for `θ` into an amplitude error for
+  `a = sin^2 θ`.
+
+The declarations below keep the quantum layer abstract and formalize the
+paper's contract for the analytic layer.  This makes the statement reusable
+with a concrete finite-dimensional quantum library that supplies the Fourier
+transform, controlled powers, and measurement distribution.
+-/
+
+noncomputable section
+
+namespace QAE
+
+/-- The amplitude corresponding to the phase angle `θ`: `a = sin^2 θ`. -/
+def amplitudeFromAngle (theta : ℝ) : ℝ :=
+  Real.sin theta ^ 2
+
+/-- The classical post-processing in `Est Amp(A, χ, M)`: output `sin^2(π y / M)`. -/
+def estAmpEstimate (M y : ℕ) : ℝ :=
+  amplitudeFromAngle (Real.pi * (y : ℝ) / (M : ℝ))
+
+/-- The phase radius `π k / M` used in the proof of Theorem 12. -/
+def phaseErrorRadius (M k : ℕ) : ℝ :=
+  Real.pi * (k : ℝ) / (M : ℝ)
+
+/-- The amplitude-error bound from Theorem 12, written via `ε = π k / M`.
+
+Expanded, this is
+`2πk sqrt(a(1-a))/M + k^2π^2/M^2`.
+-/
+def theorem12ErrorBound (a : ℝ) (M k : ℕ) : ℝ :=
+  2 * phaseErrorRadius M k * Real.sqrt (a * (1 - a)) +
+    phaseErrorRadius M k ^ 2
+
+/-- The probability lower bound stated in Theorem 12. -/
+def theorem12SuccessProbability (k : ℕ) : ℝ :=
+  if k = 1 then
+    8 / Real.pi ^ 2
+  else
+    1 - 1 / (2 * ((k : ℝ) - 1))
+
+/-- The analytic lemma used by the paper as Lemma 7. -/
+theorem paperLemma7 {a theta thetaHat epsilon : ℝ}
+    (heps : 0 ≤ epsilon)
+    (ha : a = amplitudeFromAngle theta)
+    (hPhase : |thetaHat - theta| ≤ epsilon) :
+      |amplitudeFromAngle thetaHat - a| ≤
+        2 * epsilon * Real.sqrt (a * (1 - a)) + epsilon ^ 2 := by
+  subst a
+  let delta := thetaHat - theta
+  have hthetaHat : thetaHat = theta + delta := by
+    dsimp [delta]
+    ring
+  have hsqrtd : Real.sqrt (amplitudeFromAngle theta * (1 - amplitudeFromAngle theta)) =
+      |Real.sin theta * Real.cos theta| := by
+    unfold amplitudeFromAngle
+    rw [← Real.cos_sq']
+    have hsq : Real.sin theta ^ 2 * Real.cos theta ^ 2 =
+        (Real.sin theta * Real.cos theta) ^ 2 := by
+      ring
+    rw [hsq, Real.sqrt_sq_eq_abs]
+  have hdelta : |delta| ≤ epsilon := by
+    simpa [delta] using hPhase
+  have hdelta_nonneg : 0 ≤ |delta| := abs_nonneg _
+  have hterm1 :
+      |2 * (Real.sin theta * Real.cos theta) * Real.sin delta * Real.cos delta| ≤
+        2 * |Real.sin theta * Real.cos theta| * |delta| := by
+    calc
+      |2 * (Real.sin theta * Real.cos theta) * Real.sin delta * Real.cos delta|
+          = 2 * |Real.sin theta * Real.cos theta| * |Real.sin delta| * |Real.cos delta| := by
+              rw [abs_mul, abs_mul, abs_mul]
+              norm_num
+      _ ≤ 2 * |Real.sin theta * Real.cos theta| * |delta| * |Real.cos delta| := by
+              exact mul_le_mul_of_nonneg_right
+                (mul_le_mul_of_nonneg_left (Real.abs_sin_le_abs (x := delta)) (by positivity))
+                (abs_nonneg _)
+      _ ≤ 2 * |Real.sin theta * Real.cos theta| * |delta| * 1 := by
+              exact mul_le_mul_of_nonneg_left (Real.abs_cos_le_one delta) (by positivity)
+      _ = 2 * |Real.sin theta * Real.cos theta| * |delta| := by ring
+  have hterm1eps :
+      |2 * (Real.sin theta * Real.cos theta) * Real.sin delta * Real.cos delta| ≤
+        2 * epsilon * |Real.sin theta * Real.cos theta| := by
+    calc
+      |2 * (Real.sin theta * Real.cos theta) * Real.sin delta * Real.cos delta|
+          ≤ 2 * |Real.sin theta * Real.cos theta| * |delta| := hterm1
+      _ ≤ 2 * |Real.sin theta * Real.cos theta| * epsilon := by
+          gcongr
+      _ = 2 * epsilon * |Real.sin theta * Real.cos theta| := by ring
+  have hsin_sq_le : Real.sin delta ^ 2 ≤ |delta| ^ 2 := by
+    have h := Real.abs_sin_le_abs (x := delta)
+    simpa [sq_abs] using (sq_le_sq.mpr h)
+  have hdelta_sq_le : |delta| ^ 2 ≤ epsilon ^ 2 := by
+    nlinarith [hdelta, hdelta_nonneg, heps]
+  have hterm2 :
+      |(Real.cos theta ^ 2 - Real.sin theta ^ 2) * Real.sin delta ^ 2| ≤ epsilon ^ 2 := by
+    calc
+      |(Real.cos theta ^ 2 - Real.sin theta ^ 2) * Real.sin delta ^ 2|
+          = |Real.cos theta ^ 2 - Real.sin theta ^ 2| * (Real.sin delta ^ 2) := by
+              rw [abs_mul]
+              rw [abs_of_nonneg (sq_nonneg (Real.sin delta))]
+      _ ≤ 1 * |delta| ^ 2 := by
+              have hcoef : |Real.cos theta ^ 2 - Real.sin theta ^ 2| ≤ 1 := by
+                rw [← Real.cos_two_mul']
+                exact Real.abs_cos_le_one _
+              exact mul_le_mul hcoef hsin_sq_le (sq_nonneg _) (by norm_num)
+      _ ≤ epsilon ^ 2 := by
+              simpa using hdelta_sq_le
+  have hdiff :
+      amplitudeFromAngle thetaHat - amplitudeFromAngle theta =
+        2 * (Real.sin theta * Real.cos theta) * Real.sin delta * Real.cos delta +
+          (Real.cos theta ^ 2 - Real.sin theta ^ 2) * Real.sin delta ^ 2 := by
+    unfold amplitudeFromAngle
+    rw [hthetaHat, Real.sin_add]
+    nlinarith [Real.sin_sq_add_cos_sq delta]
+  calc
+    |amplitudeFromAngle thetaHat - amplitudeFromAngle theta|
+        = |2 * (Real.sin theta * Real.cos theta) * Real.sin delta * Real.cos delta +
+          (Real.cos theta ^ 2 - Real.sin theta ^ 2) * Real.sin delta ^ 2| := by
+            rw [hdiff]
+    _ ≤ |2 * (Real.sin theta * Real.cos theta) * Real.sin delta * Real.cos delta| +
+          |(Real.cos theta ^ 2 - Real.sin theta ^ 2) * Real.sin delta ^ 2| := abs_add_le _ _
+    _ ≤ 2 * epsilon * |Real.sin theta * Real.cos theta| + epsilon ^ 2 := by
+          nlinarith [hterm1eps, hterm2]
+    _ = 2 * epsilon * Real.sqrt (amplitudeFromAngle theta * (1 - amplitudeFromAngle theta)) + epsilon ^ 2 := by
+          rw [hsqrtd]
+
+/-- Theorem 12's analytic core using the proved Lemma 7. -/
+theorem theorem12_from_phase_estimation_proved
+    {a theta thetaHat : ℝ} {M k : ℕ}
+    (hM : 0 < M)
+    (ha : a = amplitudeFromAngle theta)
+    (hPhase : |thetaHat - theta| ≤ phaseErrorRadius M k) :
+    |amplitudeFromAngle thetaHat - a| ≤ theorem12ErrorBound a M k := by
+  have hEpsNonneg : 0 ≤ phaseErrorRadius M k := by
+    unfold phaseErrorRadius
+    positivity
+  simpa [theorem12ErrorBound] using paperLemma7 hEpsNonneg ha hPhase
+
+/-- QAE post-processing error using the proved Lemma 7. -/
+theorem estAmp_error_from_phase_estimation_proved
+    {a theta : ℝ} {M k y : ℕ}
+    (hM : 0 < M)
+    (ha : a = amplitudeFromAngle theta)
+    (hPhase : |(Real.pi * (y : ℝ) / (M : ℝ)) - theta| ≤ phaseErrorRadius M k) :
+    |estAmpEstimate M y - a| ≤ theorem12ErrorBound a M k := by
+  simpa [estAmpEstimate] using
+    theorem12_from_phase_estimation_proved hM ha hPhase
+
+end QAE
 
 /-!
 # Conservative end-to-end QAE correctness
@@ -65,42 +227,9 @@ states marked by `f`.  The work register has `n` qubits and dimension `2^n`. -/
 def phaseOracle (n : ℕ) (f : Fin (QPE.M n) → Bool) : Square (QPE.M n) :=
   fun row col => if row = col then if f col then (-1 : ℂ) else 1 else 0
 
-@[simp] theorem phaseOracle_apply (n : ℕ) (f : Fin (QPE.M n) → Bool)
-    (row col : Fin (QPE.M n)) :
-    phaseOracle n f row col = if row = col then if f col then (-1 : ℂ) else 1 else 0 :=
-  rfl
-
-/-- `S_f` multiplies a marked basis state by `-1` and an unmarked basis state by `1`. -/
-theorem phaseOracle_mul_basis (n : ℕ) (f : Fin (QPE.M n) → Bool)
-    (x : Fin (QPE.M n)) :
-    phaseOracle n f ⬝ Vector.basis x =
-      (if f x then (-1 : ℂ) else 1) • Vector.basis x := by
-  ext row col
-  fin_cases col
-  simp [phaseOracle, Matrix.mul, _root_.Matrix.mul_apply, Vector.basis]
-
-/-- The selective phase oracle is unitary. -/
-theorem phaseOracle_isUnitary (n : ℕ) (f : Fin (QPE.M n) → Bool) :
-    Matrix.isUnitary (phaseOracle n f) := by
-  rw [Matrix.isUnitary_iff_adjoint_mul_self]
-  ext row col
-  by_cases h : row = col
-  · subst col
-    by_cases hf : f row <;>
-      simp [phaseOracle, Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply, hf]
-  · have h' : col ≠ row := by
-      intro hc
-      exact h hc.symm
-    simp [phaseOracle, Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply, h, h']
-
 /-- The zero reflection `S₀`: it flips only the all-zero computational-basis state. -/
 def zeroReflection (n : ℕ) : Square (QPE.M n) :=
   fun row col => if row = col then if col = QPE.zeroIndex n then (-1 : ℂ) else 1 else 0
-
-@[simp] theorem zeroReflection_apply (n : ℕ) (row col : Fin (QPE.M n)) :
-    zeroReflection n row col =
-      if row = col then if col = QPE.zeroIndex n then (-1 : ℂ) else 1 else 0 :=
-  rfl
 
 /-- `S₀` flips `|0...0⟩`. -/
 theorem zeroReflection_mul_zero_basis (n : ℕ) :
@@ -110,27 +239,6 @@ theorem zeroReflection_mul_zero_basis (n : ℕ) :
   fin_cases col
   simp [zeroReflection, Matrix.mul, _root_.Matrix.mul_apply, Vector.basis]
 
-/-- `S₀` fixes every nonzero computational-basis state. -/
-theorem zeroReflection_mul_basis_of_ne (n : ℕ) {x : Fin (QPE.M n)}
-    (hx : x ≠ QPE.zeroIndex n) :
-    zeroReflection n ⬝ Vector.basis x = Vector.basis x := by
-  ext row col
-  fin_cases col
-  simp [zeroReflection, Matrix.mul, _root_.Matrix.mul_apply, Vector.basis, hx]
-
-/-- The zero reflection is unitary. -/
-theorem zeroReflection_isUnitary (n : ℕ) : Matrix.isUnitary (zeroReflection n) := by
-  rw [Matrix.isUnitary_iff_adjoint_mul_self]
-  ext row col
-  by_cases h : row = col
-  · subst col
-    by_cases hz : row = QPE.zeroIndex n <;>
-      simp [zeroReflection, Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply, hz]
-  · have h' : col ≠ row := by
-      intro hc
-      exact h hc.symm
-    simp [zeroReflection, Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply, h, h']
-
 /-- The BHMT Grover iterate `Q = -A S₀ A† S_f` on the work register.
 
 This is the paper-level operator.  The one-qubit `Ry` operator used elsewhere is
@@ -138,28 +246,6 @@ only the two-dimensional invariant-plane specialization of this iterate. -/
 def paperGroverOperator (n : ℕ) (A : Square (QPE.M n))
     (f : Fin (QPE.M n) → Bool) : Square (QPE.M n) :=
   - (A ⬝ zeroReflection n ⬝ A† ⬝ phaseOracle n f)
-
-/-- The paper-level Grover iterate is unitary whenever the preparation operator
-`A` is unitary, as assumed implicitly in BHMT. -/
-theorem paperGroverOperator_isUnitary (n : ℕ) (A : Square (QPE.M n))
-    (f : Fin (QPE.M n) → Bool) (hA : Matrix.isUnitary A) :
-    Matrix.isUnitary (paperGroverOperator n A f) := by
-  let B : Square (QPE.M n) := A ⬝ zeroReflection n ⬝ A† ⬝ phaseOracle n f
-  change Matrix.isUnitary (-B)
-  have hAadj : Matrix.isUnitary A† := by
-    rw [Matrix.isUnitary_iff_adjoint_mul_self]
-    rw [Matrix.adjoint_adjoint]
-    exact (Matrix.isUnitary_iff_mul_adjoint_self A).mp hA
-  have hB : Matrix.isUnitary B := by
-    dsimp [B]
-    exact Matrix.isUnitary_mul
-      (Matrix.isUnitary_mul
-        (Matrix.isUnitary_mul hA (zeroReflection_isUnitary n)) hAadj)
-      (phaseOracle_isUnitary n f)
-  rw [Matrix.isUnitary_iff_adjoint_mul_self]
-  have h := (Matrix.isUnitary_iff_adjoint_mul_self B).mp hB
-  ext row col
-  simpa [Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply] using congrFun (congrFun h row) col
 
 /-- `S₀` acts on an arbitrary vector by subtracting twice its all-zero component. -/
 theorem zeroReflection_mul_vector (n : ℕ) (v : Vector (QPE.M n)) :
@@ -558,12 +644,6 @@ def paperQAEOutputProbability (m n : ℕ) (A : Square (QPE.M n))
 def paperQAEEstimate (m : ℕ) (y : Fin (QPE.M m)) : ℝ :=
   estAmpEstimate (QPE.M m) (y : ℕ)
 
-/-- The post-processing formula is `sin²(π y / M)`. -/
-theorem paperQAEEstimate_eq (m : ℕ) (y : Fin (QPE.M m)) :
-    paperQAEEstimate m y =
-      Real.sin (Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ)) ^ 2 := by
-  rfl
-
 /-- The prepared work-register state `A|0...0⟩`. -/
 def paperPreparedState (n : ℕ) (A : Square (QPE.M n)) : Vector (QPE.M n) :=
   A ⬝ Vector.basis (QPE.zeroIndex n)
@@ -753,7 +833,7 @@ theorem paperBadProbability_add_goodProbability_eq_one
   have hprep : Vector.IsNormalized (paperPreparedState n A) := by
     unfold paperPreparedState
     exact Matrix.isUnitary_mul_isNormalized hA (Vector.basis_isNormalized (QPE.zeroIndex n))
-  exact QuantumLibrary.computational_measurement_total_probability hprep
+  exact Measurement.sum_prob_of_isNormalized hprep
 
 theorem paperBadProbability_eq_one_sub_goodProbability
     {n : ℕ} {A : Square (QPE.M n)} {f : Fin (QPE.M n) → Bool}
@@ -1269,9 +1349,6 @@ theorem qaeGroverPlane_wrapped_neg_circular_window_subset_success
     (qaeGroverPlane_estimate_error_of_wrapped_neg_circular_window m k y
       ((QPE.mem_qpeCircularPhaseWindowOutcomes_iff m k (1 - theta / Real.pi) y).mp hy))
 
-theorem bhmt11SuccessProbability_eq_theorem12SuccessProbability (k : ℕ) :
-    QPE.bhmt11SuccessProbability k = theorem12SuccessProbability k := rfl
-
 theorem qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_circular_windows
     (m k : ℕ) (theta : ℝ)
     (hpos : theorem12SuccessProbability k ≤
@@ -1339,15 +1416,6 @@ theorem qaeGroverPlaneSuccessProbabilityK_lower_bound
       QPE.qpeCircularPhaseWindowProbability m k (1 - theta / Real.pi) := by
     simpa [QPE.bhmt11SuccessProbability, theorem12SuccessProbability] using hnegQ
   exact qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_circular_windows m k theta hposQ' hnegQ'
-
-/-- Canonical Grover-plane QAE succeeds with Theorem 12 probability and uses
-exactly `M = 2^m` controlled Grover powers. -/
-theorem qaeGroverPlaneCorrectness_and_query_count
-    (m k : ℕ) {theta : ℝ}
-    (htheta0 : 0 ≤ theta) (htheta_pi : theta ≤ Real.pi) (hk : 0 < k) :
-    theorem12SuccessProbability k ≤ qaeGroverPlaneSuccessProbabilityK m k theta ∧
-      QPE.M m = QPE.M m := by
-  exact ⟨qaeGroverPlaneSuccessProbabilityK_lower_bound m k htheta0 htheta_pi hk, rfl⟩
 
 
 /-- The Theorem 12 error bound in the expanded form used in the BHMT paper. -/
@@ -1445,42 +1513,6 @@ private theorem paperQAEHalfGridRatio (m : ℕ) (hm : 0 < m) :
     pow_ne_zero (m - 1) (by norm_num : (2 : ℕ) ≠ 0)
   have hpow : ((2 ^ (m - 1) : ℕ) : ℝ) ≠ 0 := by exact_mod_cast hpow_nat
   field_simp [hpow]
-
-private theorem amplitude_zero_theta_zero_or_pi {theta : ℝ}
-    (htheta0 : 0 ≤ theta) (htheta_pi : theta ≤ Real.pi)
-    (ha0 : amplitudeFromAngle theta = 0) : theta = 0 ∨ theta = Real.pi := by
-  have hsin_sq : Real.sin theta ^ 2 = 0 := by simpa [amplitudeFromAngle] using ha0
-  have hsin : Real.sin theta = 0 := sq_eq_zero_iff.mp hsin_sq
-  by_cases hlt : theta < Real.pi
-  · left
-    have hnegpi : -Real.pi < theta := by linarith [Real.pi_pos, htheta0]
-    exact (Real.sin_eq_zero_iff_of_lt_of_lt hnegpi hlt).mp hsin
-  · right
-    exact le_antisymm htheta_pi (le_of_not_gt hlt)
-
-private theorem amplitude_one_theta_pi_div_two {theta : ℝ}
-    (htheta0 : 0 ≤ theta) (htheta_pi : theta ≤ Real.pi)
-    (ha1 : amplitudeFromAngle theta = 1) : theta = Real.pi / 2 := by
-  have hsin_sq : Real.sin theta ^ 2 = 1 := by simpa [amplitudeFromAngle] using ha1
-  have hsin_nonneg : 0 ≤ Real.sin theta := Real.sin_nonneg_of_mem_Icc ⟨htheta0, htheta_pi⟩
-  have hsin_le : Real.sin theta ≤ 1 := Real.sin_le_one theta
-  have hsin : Real.sin theta = 1 := by nlinarith
-  by_cases hle : theta ≤ Real.pi / 2
-  · have hmem_theta : theta ∈ Set.Icc (-(Real.pi / 2)) (Real.pi / 2) := by
-      constructor <;> linarith [Real.pi_pos, htheta0, hle]
-    have hmem_half : Real.pi / 2 ∈ Set.Icc (-(Real.pi / 2)) (Real.pi / 2) := by
-      constructor <;> linarith [Real.pi_pos]
-    exact Real.injOn_sin hmem_theta hmem_half (by simpa [Real.sin_pi_div_two] using hsin)
-  · have hhalf_le : Real.pi / 2 ≤ theta := le_of_not_ge hle
-    have hmem_alpha : Real.pi - theta ∈ Set.Icc (-(Real.pi / 2)) (Real.pi / 2) := by
-      constructor <;> linarith [Real.pi_pos, htheta_pi, hhalf_le]
-    have hmem_half : Real.pi / 2 ∈ Set.Icc (-(Real.pi / 2)) (Real.pi / 2) := by
-      constructor <;> linarith [Real.pi_pos]
-    have halpha : Real.pi - theta = Real.pi / 2 := by
-      apply Real.injOn_sin hmem_alpha hmem_half
-      rw [Real.sin_pi_sub]
-      simpa [Real.sin_pi_div_two] using hsin
-    linarith
 
 
 theorem paperGroverOperator_mul_prepared_of_goodProbability_zero
@@ -1617,95 +1649,6 @@ theorem paperQAEEndpointOne_of_badProbability_zero
     simp [Real.sin_pi_div_two]
   exact ⟨y, by rw [hpaper, hprob], hest⟩
 
-/-- If the paper amplitude is zero, the paper-QAE distribution is concentrated
-on the zero estimate. -/
-theorem paperQAEEndpointZero
-    {m n : ℕ} {A : Square (QPE.M n)} {f : Fin (QPE.M n) → Bool}
-    {ψ0 ψ1 : Vector (QPE.M n)} {theta : ℝ}
-    (hA : Matrix.isUnitary A)
-    (hinit : A ⬝ Vector.basis (QPE.zeroIndex n) =
-      (Real.cos theta : ℂ) • ψ0 + (Real.sin theta : ℂ) • ψ1)
-    (hbad : ∀ x, f x = true → ψ0 x 0 = 0)
-    (hgood : ∀ x, f x = false → ψ1 x 0 = 0)
-    (hψ0 : Vector.IsNormalized ψ0) (hψ1 : Vector.IsNormalized ψ1)
-    (htheta0 : 0 ≤ theta) (htheta_pi : theta ≤ Real.pi)
-    (ha0 : amplitudeFromAngle theta = 0) :
-    ∃ y : Fin (QPE.M m),
-      paperQAEOutputProbability m n A f y = 1 ∧ paperQAEEstimate m y = 0 := by
-  let y := QPE.zeroIndex m
-  have hprob0 : QPE.qpeApproxOutcomeProbability m 0 y = 1 := by
-    have hgrid : (((y : ℕ) : ℝ) / (QPE.M m : ℝ)) = 0 := by simp [y, QPE.zeroIndex]
-    rw [← hgrid]
-    exact qpeApproxOutcomeProbability_exact_grid_eq_one m y
-  have hprob1 : QPE.qpeApproxOutcomeProbability m 1 y = 1 := by
-    have h := QPE.qpeApproxOutcomeProbability_add_one m 0 y
-    exact (by simpa using h.trans hprob0)
-  have hest : paperQAEEstimate m y = 0 := by
-    unfold paperQAEEstimate estAmpEstimate amplitudeFromAngle
-    simp [y, QPE.zeroIndex]
-  refine ⟨y, ?_, hest⟩
-  have hmix := paperQAEOutputProbability_eq_good_bad_mixture
-    (m := m) (n := n) (A := A) (f := f) (ψ0 := ψ0) (ψ1 := ψ1)
-    (theta := theta) hA hinit hbad hgood hψ0 hψ1 y
-  rw [hmix]
-  rcases amplitude_zero_theta_zero_or_pi htheta0 htheta_pi ha0 with htheta | htheta
-  · subst theta
-    norm_num [hprob0, hprob1]
-  · subst theta
-    have hphase : Real.pi / Real.pi = (1 : ℝ) := by field_simp [Real.pi_ne_zero]
-    rw [hphase]
-    norm_num [hprob0, hprob1]
-
-/-- If the paper amplitude is one, the paper-QAE distribution is concentrated
-on the unit estimate. -/
-theorem paperQAEEndpointOne
-    {m n : ℕ} {A : Square (QPE.M n)} {f : Fin (QPE.M n) → Bool}
-    {ψ0 ψ1 : Vector (QPE.M n)} {theta : ℝ}
-    (hA : Matrix.isUnitary A) (hm : 0 < m)
-    (hinit : A ⬝ Vector.basis (QPE.zeroIndex n) =
-      (Real.cos theta : ℂ) • ψ0 + (Real.sin theta : ℂ) • ψ1)
-    (hbad : ∀ x, f x = true → ψ0 x 0 = 0)
-    (hgood : ∀ x, f x = false → ψ1 x 0 = 0)
-    (hψ0 : Vector.IsNormalized ψ0) (hψ1 : Vector.IsNormalized ψ1)
-    (htheta0 : 0 ≤ theta) (htheta_pi : theta ≤ Real.pi)
-    (ha1 : amplitudeFromAngle theta = 1) :
-    ∃ y : Fin (QPE.M m),
-      paperQAEOutputProbability m n A f y = 1 ∧ paperQAEEstimate m y = 1 := by
-  let y : Fin (QPE.M m) := ⟨QPE.M (m - 1), by
-    unfold QPE.M
-    exact Nat.pow_lt_pow_right (by norm_num) (Nat.sub_lt hm (by norm_num))⟩
-  have hgrid : (((y : ℕ) : ℝ) / (QPE.M m : ℝ)) = 1 / 2 := paperQAEHalfGridRatio m hm
-  have hprob : QPE.qpeApproxOutcomeProbability m (1 / 2) y = 1 := by
-    rw [← hgrid]
-    exact qpeApproxOutcomeProbability_exact_grid_eq_one m y
-  have hest : paperQAEEstimate m y = 1 := by
-    unfold paperQAEEstimate estAmpEstimate amplitudeFromAngle
-    have harg : Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ) = Real.pi / 2 := by
-      rw [show Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ) =
-        Real.pi * (((y : ℕ) : ℝ) / (QPE.M m : ℝ)) by ring]
-      rw [hgrid]
-      ring
-    rw [harg]
-    simp [Real.sin_pi_div_two]
-  refine ⟨y, ?_, hest⟩
-  have htheta := amplitude_one_theta_pi_div_two htheta0 htheta_pi ha1
-  have hmix := paperQAEOutputProbability_eq_good_bad_mixture
-    (m := m) (n := n) (A := A) (f := f) (ψ0 := ψ0) (ψ1 := ψ1)
-    (theta := theta) hA hinit hbad hgood hψ0 hψ1 y
-  rw [hmix, htheta]
-  have hphase : (Real.pi / 2) / Real.pi = (1 / 2 : ℝ) := by field_simp [Real.pi_ne_zero]
-  rw [hphase]
-  norm_num [hprob]
-
-/-- The paper QAE estimate always lies in `[0, 1]`. -/
-theorem paperQAEEstimate_mem_Icc (m : ℕ) (y : Fin (QPE.M m)) :
-    0 ≤ paperQAEEstimate m y ∧ paperQAEEstimate m y ≤ 1 := by
-  constructor
-  · unfold paperQAEEstimate estAmpEstimate amplitudeFromAngle
-    positivity
-  · unfold paperQAEEstimate estAmpEstimate amplitudeFromAngle
-    exact Real.sin_sq_le_one _
-
 
 theorem paperQAEOutputProbability_nonneg
     (m n : ℕ) (A : Square (QPE.M n)) (f : Fin (QPE.M n) → Bool)
@@ -1743,16 +1686,13 @@ theorem paperQAESuccessSum_ge_one_of_point
     1 = paperQAEOutputProbability m n A f y := hprob.symm
     _ ≤ S.sum (fun y => paperQAEOutputProbability m n A f y) := hsingle
 
-private theorem eight_div_pi_sq_le_one : 8 / Real.pi ^ 2 ≤ (1 : ℝ) := by
-  have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
-  have hpi_sq_ge_eight : (8 : ℝ) ≤ Real.pi ^ 2 := by nlinarith [Real.pi_gt_three]
-  exact (div_le_one hpi_sq_pos).mpr hpi_sq_ge_eight
-
 private theorem theorem12SuccessProbability_le_one {k : ℕ} (hk : 0 < k) :
     theorem12SuccessProbability k ≤ 1 := by
   unfold theorem12SuccessProbability
   by_cases hk1 : k = 1
-  · simpa [hk1] using eight_div_pi_sq_le_one
+  · have hpi_sq_pos : 0 < Real.pi ^ 2 := sq_pos_of_ne_zero Real.pi_ne_zero
+    have hpi_sq_ge_eight : (8 : ℝ) ≤ Real.pi ^ 2 := by nlinarith [Real.pi_gt_three]
+    simpa [hk1] using (div_le_one hpi_sq_pos).mpr hpi_sq_ge_eight
   · have hkgt : 1 < k := by omega
     have hkgtR : (1 : ℝ) < (k : ℝ) := by exact_mod_cast hkgt
     have hden_pos : 0 < 2 * ((k : ℝ) - 1) := by nlinarith

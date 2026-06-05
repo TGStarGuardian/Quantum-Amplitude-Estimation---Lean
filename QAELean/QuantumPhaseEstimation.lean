@@ -5,6 +5,8 @@ import Mathlib.RingTheory.RootsOfUnity.Complex
 import Mathlib.Analysis.Fourier.ZMod
 import Mathlib.Analysis.PSeries
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.Deriv
+import Mathlib.Analysis.Real.Pi.Bounds
+import Mathlib.Analysis.SpecialFunctions.Trigonometric.Bounds
 import Mathlib.Algebra.Order.Round
 
 /-!
@@ -28,26 +30,6 @@ namespace QPE
 
 open QuantumComputing
 open scoped BigOperators
-
-/-- Squared norm of `exp(2πix) - 1`, written in the sine form used by the
-standard phase-estimation probability bound. -/
-theorem phase_sub_one_normSq (x : ℝ) :
-    Complex.normSq ((Real.fourierChar x : ℂ) - 1) = 4 * Real.sin (Real.pi * x) ^ 2 := by
-  rw [Complex.normSq_eq_norm_sq]
-  have h := Complex.norm_exp_I_mul_ofReal_sub_one (2 * Real.pi * x)
-  norm_num at h
-  rw [Real.fourierChar_apply]
-  have harg : ((2 * Real.pi * x : ℝ) : ℂ) * Complex.I =
-      Complex.I * (2 * Real.pi * x : ℂ) := by
-    rw [mul_comm]
-    norm_num
-  rw [harg]
-  rw [h]
-  have hs : Real.sin (2 * Real.pi * x / 2) = Real.sin (Real.pi * x) := by
-    ring_nf
-  rw [hs]
-  rw [mul_pow, sq_abs]
-  ring_nf
 
 /-- Dimension of the `m`-qubit counting register. -/
 def M (m : ℕ) : ℕ := 2 ^ m
@@ -100,22 +82,6 @@ correctness layer uses this predicate for phases already represented in the
 standard interval, namely `theta / π` and `1 - theta / π`. -/
 def qpePhaseWindow (m k : ℕ) (theta : ℝ) (y : Fin (M m)) : Prop :=
   |theta - (((y : ℕ) : ℝ) / (M m : ℝ))| ≤ (k : ℝ) / (M m : ℝ)
-
-/-- Outcomes in the QPE success window of radius `k/M`. -/
-def qpePhaseWindowOutcomes (m k : ℕ) (theta : ℝ) : Finset (Fin (M m)) := by
-  classical
-  exact Finset.univ.filter (qpePhaseWindow m k theta)
-
-/-- Probability mass assigned by approximate QPE to the success window. -/
-def qpePhaseWindowProbability (m k : ℕ) (theta : ℝ) : ℝ :=
-  (qpePhaseWindowOutcomes m k theta).sum (fun y => qpeApproxOutcomeProbability m theta y)
-
-/-- Membership in the concrete QPE phase window unfolds to the grid-distance bound. -/
-theorem mem_qpePhaseWindowOutcomes_iff (m k : ℕ) (theta : ℝ) (y : Fin (M m)) :
-    y ∈ qpePhaseWindowOutcomes m k theta ↔ qpePhaseWindow m k theta y := by
-  classical
-  unfold qpePhaseWindowOutcomes
-  simp
 
 /-- Approximate-QPE outcome probabilities are nonnegative. -/
 theorem qpeApproxOutcomeProbability_nonneg (m : ℕ) (theta : ℝ) (y : Fin (M m)) :
@@ -198,68 +164,6 @@ theorem mem_qpeCircularPhaseWindowFailureOutcomes_iff
   classical
   unfold qpeCircularPhaseWindowFailureOutcomes
   simp
-
-theorem qpePhaseWindow_subset_circular (m k : ℕ) (theta : ℝ) :
-    qpePhaseWindowOutcomes m k theta ⊆ qpeCircularPhaseWindowOutcomes m k theta := by
-  intro y hy
-  have hlin := (mem_qpePhaseWindowOutcomes_iff m k theta y).mp hy
-  exact (mem_qpeCircularPhaseWindowOutcomes_iff m k theta y).mpr
-    (le_trans (unitPhaseDistance_le_abs_sub theta (((y : ℕ) : ℝ) / (M m : ℝ))) hlin)
-
-theorem qpePhaseWindowProbability_le_circular
-    (m k : ℕ) (theta : ℝ) :
-    qpePhaseWindowProbability m k theta ≤ qpeCircularPhaseWindowProbability m k theta := by
-  unfold qpePhaseWindowProbability qpeCircularPhaseWindowProbability
-  exact Finset.sum_le_sum_of_subset_of_nonneg (qpePhaseWindow_subset_circular m k theta)
-    (by intro y _hyBig _hyNot; exact qpeApproxOutcomeProbability_nonneg m theta y)
-
-theorem exists_qpeCircularPhaseWindow_one_of_mem_unitInterval
-    (m : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1) :
-    ∃ y : Fin (M m), qpeCircularPhaseWindow m 1 theta y := by
-  by_cases htheta1 : theta = 1
-  · subst theta
-    refine ⟨zeroIndex m, ?_⟩
-    unfold qpeCircularPhaseWindow unitPhaseDistance
-    simp [zeroIndex]
-  · have htheta_lt_one : theta < 1 := lt_of_le_of_ne h1 htheta1
-    let n : ℕ := Nat.floor ((M m : ℝ) * theta)
-    have hMposN : 0 < M m := Nat.two_pow_pos m
-    have hMpos : 0 < (M m : ℝ) := by exact_mod_cast hMposN
-    have hx_nonneg : 0 ≤ (M m : ℝ) * theta := mul_nonneg (le_of_lt hMpos) h0
-    have hx_lt_M : (M m : ℝ) * theta < (M m : ℝ) := by
-      nlinarith [hMpos, htheta_lt_one]
-    have hn_lt_M : n < M m := by
-      dsimp [n]
-      exact (Nat.floor_lt hx_nonneg).mpr hx_lt_M
-    refine ⟨⟨n, hn_lt_M⟩, ?_⟩
-    unfold qpeCircularPhaseWindow
-    have hn_le : (n : ℝ) ≤ (M m : ℝ) * theta := by
-      dsimp [n]
-      exact Nat.floor_le hx_nonneg
-    have htheta_lt : (M m : ℝ) * theta < (n : ℝ) + 1 := by
-      dsimp [n]
-      exact Nat.lt_floor_add_one ((M m : ℝ) * theta)
-    have hgrid_le : (n : ℝ) / (M m : ℝ) ≤ theta := by
-      rw [div_le_iff₀ hMpos]
-      simpa [mul_comm] using hn_le
-    have htheta_lt_div : theta < ((n : ℝ) + 1) / (M m : ℝ) := by
-      rw [lt_div_iff₀ hMpos]
-      simpa [mul_comm] using htheta_lt
-    have hsplit : ((n : ℝ) + 1) / (M m : ℝ) = (n : ℝ) / (M m : ℝ) + 1 / (M m : ℝ) := by
-      field_simp [hMpos.ne']
-    have htheta_sub_lt : theta - (n : ℝ) / (M m : ℝ) < 1 / (M m : ℝ) := by
-      rw [hsplit] at htheta_lt_div
-      linarith
-    have habs_le : |theta - (n : ℝ) / (M m : ℝ)| ≤ 1 / (M m : ℝ) := by
-      rw [abs_of_nonneg (sub_nonneg.mpr hgrid_le)]
-      exact le_of_lt htheta_sub_lt
-    simpa using le_trans (unitPhaseDistance_le_abs_sub theta ((n : ℝ) / (M m : ℝ))) habs_le
-
-theorem exists_mem_qpeCircularPhaseWindowOutcomes_one_of_mem_unitInterval
-    (m : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1) :
-    ∃ y : Fin (M m), y ∈ qpeCircularPhaseWindowOutcomes m 1 theta := by
-  rcases exists_qpeCircularPhaseWindow_one_of_mem_unitInterval m h0 h1 with ⟨y, hy⟩
-  exact ⟨y, (mem_qpeCircularPhaseWindowOutcomes_iff m 1 theta y).mpr hy⟩
 
 /-- Lower adjacent grid index, namely `⌊M * theta⌋`.
 
@@ -445,43 +349,6 @@ theorem qpeAdjacentOutcomes_ne_of_pos_m
   · have hsucc_eq : n + 1 = M m := by omega
     rw [hsucc_eq, Nat.mod_self] at hval
     omega
-
-private theorem abs_grid_error_le_half_div_M
-    (m : ℕ) {theta : ℝ} (h0 : 0 ≤ theta)
-    {n : ℕ} (hn : n = (round ((M m : ℝ) * theta)).toNat) :
-    |theta - (n : ℝ) / (M m : ℝ)| ≤ 1 / (2 * (M m : ℝ)) := by
-  subst n
-  have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-  let x : ℝ := (M m : ℝ) * theta
-  have hx_nonneg : 0 ≤ x := by
-    have hMnonneg : 0 ≤ (M m : ℝ) := by exact_mod_cast (Nat.zero_le (M m))
-    exact mul_nonneg hMnonneg h0
-  have hround_nonneg : 0 ≤ round x := by
-    rw [round_eq]
-    exact Int.floor_nonneg.mpr (by nlinarith)
-  have hround_cast : (((round x).toNat : ℕ) : ℝ) = (round x : ℝ) := by
-    exact_mod_cast Int.toNat_of_nonneg hround_nonneg
-  have herr : |(M m : ℝ) * theta - (((round x).toNat : ℕ) : ℝ)| ≤ (1 / 2 : ℝ) := by
-    simpa [x, hround_cast] using abs_sub_round x
-  have hscaled := div_le_div_of_nonneg_right herr (le_of_lt hMpos)
-  have hrewrite : |theta - ((((round x).toNat : ℕ) : ℝ)) / (M m : ℝ)| =
-      |((M m : ℝ) * theta - (((round x).toNat : ℕ) : ℝ))| / (M m : ℝ) := by
-    calc
-      |theta - ((((round x).toNat : ℕ) : ℝ)) / (M m : ℝ)|
-          = |(((M m : ℝ) * theta - (((round x).toNat : ℕ) : ℝ)) / (M m : ℝ))| := by
-            congr 1
-            field_simp [hMpos.ne']
-      _ = |((M m : ℝ) * theta - (((round x).toNat : ℕ) : ℝ))| / (M m : ℝ) := by
-            rw [abs_div, abs_of_pos hMpos]
-  have hhalf : (1 / 2 : ℝ) / (M m : ℝ) = 1 / (2 * (M m : ℝ)) := by ring_nf
-  rw [hrewrite]
-  simpa [hhalf, one_div, mul_comm, mul_left_comm, mul_assoc] using hscaled
-
-private theorem half_div_M_le_one_div_M (m : ℕ) :
-    (1 : ℝ) / (2 * (M m : ℝ)) ≤ 1 / (M m : ℝ) := by
-  have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
-  field_simp [hMpos.ne']
-  nlinarith [hMpos]
 
 /-- Failure of the circular window means the circular phase distance is strictly
 larger than the window radius. -/
@@ -689,44 +556,6 @@ def BHMT11CircularWindowBound : Prop :=
     0 ≤ theta -> theta ≤ 1 -> 0 < k ->
       bhmt11SuccessProbability k ≤ qpeCircularPhaseWindowProbability m k theta
 
-/-- Finite inverse-square tail bound in the form used by the BHMT11 failure estimate.
-The interval `Ioc (k - 1) n` is `{k, ..., n}`. -/
-theorem half_inv_sq_tail_sum_le (k n : ℕ) (hk : 1 < k) :
-    (∑ i ∈ Finset.Ioc (k - 1) n, (1 / (2 * (i : ℝ) ^ 2) : ℝ)) ≤
-      1 / (2 * ((k : ℝ) - 1)) := by
-  have hkpred_ne : k - 1 ≠ 0 := by omega
-  have hsum_inv :
-      (∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹)) ≤
-        (((k - 1 : ℕ) : ℝ))⁻¹ := by
-    calc
-      (∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹))
-          ≤ ∑ i ∈ Finset.Ioc (k - 1) (max (k - 1) n), (((i : ℝ) ^ 2)⁻¹) := by
-            apply Finset.sum_le_sum_of_subset_of_nonneg
-            · intro i hi
-              exact Finset.mem_Ioc.mpr ⟨(Finset.mem_Ioc.mp hi).1,
-                le_trans (Finset.mem_Ioc.mp hi).2 (le_max_right _ _)⟩
-            · intro i _hi _hnot
-              positivity
-      _ ≤ (((k - 1 : ℕ) : ℝ))⁻¹ - (((max (k - 1) n : ℕ) : ℝ))⁻¹ :=
-            sum_Ioc_inv_sq_le_sub (α := ℝ) hkpred_ne (le_max_left _ _)
-      _ ≤ (((k - 1 : ℕ) : ℝ))⁻¹ := by
-            exact sub_le_self _ (by positivity)
-  have hmul := mul_le_mul_of_nonneg_left hsum_inv (by norm_num : (0 : ℝ) ≤ 1 / 2)
-  calc
-    (∑ i ∈ Finset.Ioc (k - 1) n, (1 / (2 * (i : ℝ) ^ 2) : ℝ))
-        = (1 / 2 : ℝ) * ∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹) := by
-          rw [Finset.mul_sum]
-          apply Finset.sum_congr rfl
-          intro i _hi
-          ring_nf
-    _ ≤ (1 / 2 : ℝ) * (((k - 1 : ℕ) : ℝ))⁻¹ := hmul
-    _ = 1 / (2 * ((k : ℝ) - 1)) := by
-          have hk1 : ((k - 1 : ℕ) : ℝ) = (k : ℝ) - 1 := by
-            rw [Nat.cast_sub hk.le]
-            norm_num
-          rw [hk1]
-          field_simp [show (2 : ℝ) ≠ 0 by norm_num]
-
 /-- The QPE phase-kickback state is periodic with period one in the eigenphase. -/
 theorem phaseState_add_one (m : ℕ) (theta : ℝ) :
     phaseState m (theta + 1) = phaseState m theta := by
@@ -856,7 +685,42 @@ theorem qpeCircularFailureProbability_le_of_bucket_tail
   unfold qpeCircularPhaseWindowFailureProbability
   change (∑ y ∈ F, p y) ≤ 1 / (2 * ((k : ℝ) - 1))
   rw [← hpartition]
-  exact le_trans hsum_tail (half_inv_sq_tail_sum_le k n hk)
+  have htail_bound :
+      (∑ i ∈ Finset.Ioc (k - 1) n, (1 / (2 * (i : ℝ) ^ 2) : ℝ)) ≤
+        1 / (2 * ((k : ℝ) - 1)) := by
+    have hkpred_ne : k - 1 ≠ 0 := by omega
+    have hsum_inv :
+        (∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹)) ≤
+          (((k - 1 : ℕ) : ℝ))⁻¹ := by
+      calc
+        (∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹))
+            ≤ ∑ i ∈ Finset.Ioc (k - 1) (max (k - 1) n), (((i : ℝ) ^ 2)⁻¹) := by
+              apply Finset.sum_le_sum_of_subset_of_nonneg
+              · intro i hi
+                exact Finset.mem_Ioc.mpr ⟨(Finset.mem_Ioc.mp hi).1,
+                  le_trans (Finset.mem_Ioc.mp hi).2 (le_max_right _ _)⟩
+              · intro i _hi _hnot
+                positivity
+        _ ≤ (((k - 1 : ℕ) : ℝ))⁻¹ - (((max (k - 1) n : ℕ) : ℝ))⁻¹ :=
+              sum_Ioc_inv_sq_le_sub (α := ℝ) hkpred_ne (le_max_left _ _)
+        _ ≤ (((k - 1 : ℕ) : ℝ))⁻¹ := by
+              exact sub_le_self _ (by positivity)
+    have hmul := mul_le_mul_of_nonneg_left hsum_inv (by norm_num : (0 : ℝ) ≤ 1 / 2)
+    calc
+      (∑ i ∈ Finset.Ioc (k - 1) n, (1 / (2 * (i : ℝ) ^ 2) : ℝ))
+          = (1 / 2 : ℝ) * ∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹) := by
+            rw [Finset.mul_sum]
+            apply Finset.sum_congr rfl
+            intro i _hi
+            ring_nf
+      _ ≤ (1 / 2 : ℝ) * (((k - 1 : ℕ) : ℝ))⁻¹ := hmul
+      _ = 1 / (2 * ((k : ℝ) - 1)) := by
+            have hk1 : ((k - 1 : ℕ) : ℝ) = (k : ℝ) - 1 := by
+              rw [Nat.cast_sub hk.le]
+              norm_num
+            rw [hk1]
+            field_simp [show (2 : ℝ) ≠ 0 by norm_num]
+  exact le_trans hsum_tail htail_bound
 
 /-- The real two-nearest-outcome core inequality for the BHMT11 `k = 1` constant.
 For `x` the fractional part of `M * theta`, this is the normalized sum of the two
@@ -1113,35 +977,6 @@ def controlledPowerMatrix {n : ℕ} (m : ℕ) (U : Square n) : Square (M m * n) 
     else
       0
 
-@[simp] theorem uniformState_apply (m : ℕ) (k : Fin (M m)) :
-    uniformState m k 0 = ((M m : ℝ)⁻¹.sqrt : ℂ) := by
-  rfl
-
-@[simp] theorem qftMatrix_apply (m : ℕ) (row col : Fin (M m)) :
-    qftMatrix m row col = ((M m : ℝ)⁻¹.sqrt : ℂ) *
-      (Real.fourierChar (((row : ℕ) * (col : ℕ) : ℝ) / (M m : ℝ)) : ℂ) := by
-  rfl
-
-@[simp] theorem inverseQFTMatrix_apply (m : ℕ) (row col : Fin (M m)) :
-    inverseQFTMatrix m row col = ((M m : ℝ)⁻¹.sqrt : ℂ) *
-      (Real.fourierChar (-(((row : ℕ) * (col : ℕ) : ℝ) / (M m : ℝ))) : ℂ) := by
-  rfl
-
-@[simp] theorem phaseState_apply (m : ℕ) (theta : ℝ) (k : Fin (M m)) :
-    phaseState m theta k 0 = (((M m : ℝ).sqrt : ℂ)⁻¹) * (Real.fourierChar ((k : ℕ) * theta) : ℂ) := by
-  rfl
-
-@[simp] theorem controlledPowerMatrix_apply_same {n : ℕ} (m : ℕ) (U : Square n)
-    (k : Fin (M m)) (i j : Fin n) :
-    controlledPowerMatrix m U (finProdFinEquiv (k, i)) (finProdFinEquiv (k, j)) =
-      (U ^ (k : ℕ)) i j := by
-  simp [controlledPowerMatrix]
-
-@[simp] theorem controlledPowerMatrix_apply_ne {n : ℕ} (m : ℕ) (U : Square n)
-    {k l : Fin (M m)} (i j : Fin n) (hkl : k ≠ l) :
-    controlledPowerMatrix m U (finProdFinEquiv (k, i)) (finProdFinEquiv (l, j)) = 0 := by
-  simp [controlledPowerMatrix, hkl]
-
 /-- The QFT matrix sends a computational-basis state to the corresponding
 exact phase state. -/
 theorem qftMatrix_mul_basisState (m : ℕ) (y : Fin (M m)) :
@@ -1152,93 +987,6 @@ theorem qftMatrix_mul_basisState (m : ℕ) (y : Fin (M m)) :
   left
   congr 1
   field_simp [show (M m : ℝ) ≠ 0 by exact_mod_cast (NeZero.ne (M m))]
-
-/-- Powers of a matrix preserve an eigenvector equation. -/
-theorem matrix_power_eigenvector {n : ℕ} {U : Square n} {ψ : Vector n} {lam : ℂ}
-    (h : U ⬝ ψ = lam • ψ) :
-    ∀ k : ℕ, (U ^ k) ⬝ ψ = (lam ^ k) • ψ := by
-  intro k
-  induction k with
-  | zero =>
-      simp [Matrix.mul]
-  | succ k ih =>
-      calc
-        (U ^ (Nat.succ k)) ⬝ ψ = U ⬝ ((U ^ k) ⬝ ψ) := by
-          change (U ^ (Nat.succ k)) * ψ = U * ((U ^ k) * ψ)
-          rw [pow_succ']
-          rw [_root_.Matrix.mul_assoc]
-        _ = U ⬝ ((lam ^ k) • ψ) := by rw [ih]
-        _ = (lam ^ k) • (U ⬝ ψ) := by simp [Matrix.mul, _root_.Matrix.mul_smul]
-        _ = (lam ^ k) • (lam • ψ) := by rw [h]
-        _ = (lam ^ Nat.succ k) • ψ := by
-          rw [pow_succ]
-          simp [smul_smul, mul_comm]
-
-/-- Powers of a unitary matrix are unitary. -/
-theorem matrix_isUnitary_pow {n : ℕ} {U : Square n} (hU : Matrix.isUnitary U) :
-    ∀ k : ℕ, Matrix.isUnitary (U ^ k) := by
-  intro k
-  induction k with
-  | zero => simp
-  | succ k ih =>
-      rw [pow_succ']
-      change Matrix.isUnitary (U ⬝ (U ^ k))
-      exact Matrix.isUnitary_mul hU ih
-
-/-- The block-diagonal controlled-power matrix is unitary whenever the target
-unitary `U` is unitary. -/
-theorem controlledPowerMatrix_adjoint_mul_self {n : ℕ} {m : ℕ} {U : Square n}
-    (hU : Matrix.isUnitary U) :
-    (controlledPowerMatrix m U)† ⬝ controlledPowerMatrix m U = I (M m * n) := by
-  ext row col
-  rw [← finProdFinEquiv.apply_symm_apply row]
-  rw [← finProdFinEquiv.apply_symm_apply col]
-  rcases finProdFinEquiv.symm row with ⟨k, i⟩
-  rcases finProdFinEquiv.symm col with ⟨l, j⟩
-  simp [Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply]
-  calc
-    (∑ x : Fin (M m * n),
-        star (controlledPowerMatrix m U x (finProdFinEquiv (k, i))) *
-          controlledPowerMatrix m U x (finProdFinEquiv (l, j)))
-        = ∑ p : Fin (M m) × Fin n,
-            star (controlledPowerMatrix m U (finProdFinEquiv p) (finProdFinEquiv (k, i))) *
-              controlledPowerMatrix m U (finProdFinEquiv p) (finProdFinEquiv (l, j)) := by
-          symm
-          exact Fintype.sum_equiv finProdFinEquiv
-            (fun p : Fin (M m) × Fin n =>
-              star (controlledPowerMatrix m U (finProdFinEquiv p) (finProdFinEquiv (k, i))) *
-                controlledPowerMatrix m U (finProdFinEquiv p) (finProdFinEquiv (l, j)))
-            (fun x : Fin (M m * n) =>
-              star (controlledPowerMatrix m U x (finProdFinEquiv (k, i))) *
-                controlledPowerMatrix m U x (finProdFinEquiv (l, j)))
-            (by intro p; rfl)
-    _ = ∑ a : Fin (M m), ∑ b : Fin n,
-            star (controlledPowerMatrix m U (finProdFinEquiv (a, b)) (finProdFinEquiv (k, i))) *
-              controlledPowerMatrix m U (finProdFinEquiv (a, b)) (finProdFinEquiv (l, j)) := by
-          rw [Fintype.sum_prod_type]
-    _ = (1 : Square (M m * n)) (finProdFinEquiv (k, i)) (finProdFinEquiv (l, j)) := by
-          by_cases hkl : k = l
-          · subst l
-            have hpow : (U ^ (k : ℕ))† ⬝ (U ^ (k : ℕ)) = (1 : Square n) :=
-              (Matrix.isUnitary_iff_adjoint_mul_self (U ^ (k : ℕ))).mp (matrix_isUnitary_pow hU (k : ℕ))
-            have hij := congrFun (congrFun hpow i) j
-            change (∑ x : Fin n, star ((U ^ (k : ℕ)) x i) * (U ^ (k : ℕ)) x j) =
-              (1 : Square n) i j at hij
-            have hOne : (1 : Square (M m * n)) (finProdFinEquiv (k, i)) (finProdFinEquiv (k, j)) =
-                (1 : Square n) i j := by
-              simp [_root_.Matrix.one_apply]
-            rw [hOne]
-            simpa [controlledPowerMatrix] using hij
-          · have hlk : l ≠ k := by
-              intro h
-              exact hkl h.symm
-            simp [controlledPowerMatrix, hkl, hlk]
-
-/-- The concrete controlled-power matrix is unitary whenever `U` is unitary. -/
-theorem controlledPowerMatrix_isUnitary {n : ℕ} (m : ℕ) {U : Square n}
-    (hU : Matrix.isUnitary U) : Matrix.isUnitary (controlledPowerMatrix m U) := by
-  rw [Matrix.isUnitary_iff_adjoint_mul_self]
-  exact controlledPowerMatrix_adjoint_mul_self hU
 
 /-- Controlled powers produce the kicked-back phase state for an arbitrary real eigenphase. -/
 theorem controlledPowerMatrix_mul_uniform_of_real_power_action {n : ℕ} {m : ℕ}
@@ -1278,7 +1026,7 @@ theorem controlledPowerMatrix_mul_uniform_of_real_power_action {n : ℕ} {m : �
             Subsingleton.elim _ _
           have hcol1 : (finProdFinEquiv.symm (0 : Fin (1 * 1))).2 = (0 : Fin 1) :=
             Subsingleton.elim _ _
-          simp [controlledPowerMatrix, Matrix.kron, hcol0, hcol1]
+          simp [controlledPowerMatrix, Matrix.kron, hcol0, hcol1, uniformState]
           calc
             ∑ x, (U ^ ↑k) i x * ((((M m : ℝ).sqrt : ℂ)⁻¹) * ψ x 0)
                 = (((M m : ℝ).sqrt : ℂ)⁻¹) * (∑ x, (U ^ ↑k) i x * ψ x 0) := by
@@ -1301,7 +1049,23 @@ theorem controlledPowerMatrix_mul_uniform_of_real_eigenphase {n : ℕ} {m : ℕ}
     (heigen : U ⬝ ψ = ((Real.fourierChar theta : ℂ)) • ψ) :
     controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ) = phaseState m theta ⊗ ψ := by
   exact controlledPowerMatrix_mul_uniform_of_real_power_action (fun k => by
-    have hpow := matrix_power_eigenvector heigen (k : ℕ)
+    have hpow : (U ^ (k : ℕ)) ⬝ ψ = ((Real.fourierChar theta : ℂ) ^ (k : ℕ)) • ψ := by
+      induction (k : ℕ) with
+      | zero =>
+          simp [Matrix.mul]
+      | succ r ih =>
+          calc
+            (U ^ (Nat.succ r)) ⬝ ψ = U ⬝ ((U ^ r) ⬝ ψ) := by
+              change (U ^ (Nat.succ r)) * ψ = U * ((U ^ r) * ψ)
+              rw [pow_succ']
+              rw [_root_.Matrix.mul_assoc]
+            _ = U ⬝ (((Real.fourierChar theta : ℂ) ^ r) • ψ) := by rw [ih]
+            _ = ((Real.fourierChar theta : ℂ) ^ r) • (U ⬝ ψ) := by
+              simp [Matrix.mul, _root_.Matrix.mul_smul]
+            _ = ((Real.fourierChar theta : ℂ) ^ r) • ((Real.fourierChar theta : ℂ) • ψ) := by rw [heigen]
+            _ = ((Real.fourierChar theta : ℂ) ^ Nat.succ r) • ψ := by
+              rw [pow_succ]
+              simp [smul_smul, mul_comm]
     have hphase : (Real.fourierChar ((k : ℕ) * theta) : ℂ) =
         (Real.fourierChar theta : ℂ) ^ (k : ℕ) := by
       rw [← nsmul_eq_mul]
@@ -1317,7 +1081,7 @@ theorem phaseState_isNormalized (m : ℕ) (theta : ℝ) :
   ext i j
   fin_cases i
   fin_cases j
-  simp [Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply]
+  simp [phaseState, Matrix.mul, Matrix.adjoint, _root_.Matrix.mul_apply]
   simp_rw [← Circle.star_addChar]
   have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
   have hterm : ∀ k : Fin (M m),
@@ -1516,7 +1280,7 @@ theorem qpeApproxAmplitude_eq_normalized_phase_sum
         (∑ k : Fin (M m),
           (Real.fourierChar ((k : ℕ) * (theta - (((y : ℕ) : ℝ) / (M m : ℝ)))) : ℂ)) := by
   unfold qpeApproxAmplitude
-  simp [Matrix.mul, _root_.Matrix.mul_apply]
+  simp [inverseQFTMatrix, phaseState, Matrix.mul, _root_.Matrix.mul_apply]
   rw [Finset.mul_sum]
   apply Finset.sum_congr rfl
   intro k hk
@@ -1571,7 +1335,24 @@ theorem phase_fin_sum_normSq {N : ℕ} {delta : ℝ}
   change Complex.normSq (S * ((Real.fourierChar delta : ℂ) - 1)) =
     Complex.normSq ((Real.fourierChar (N * delta) : ℂ) - 1) at hmul
   rw [Complex.normSq_mul] at hmul
-  rw [phase_sub_one_normSq, phase_sub_one_normSq] at hmul
+  have hnorm_sub_one (x : ℝ) :
+      Complex.normSq ((Real.fourierChar x : ℂ) - 1) = 4 * Real.sin (Real.pi * x) ^ 2 := by
+    rw [Complex.normSq_eq_norm_sq]
+    have h := Complex.norm_exp_I_mul_ofReal_sub_one (2 * Real.pi * x)
+    norm_num at h
+    rw [Real.fourierChar_apply]
+    have harg : ((2 * Real.pi * x : ℝ) : ℂ) * Complex.I =
+        Complex.I * (2 * Real.pi * x : ℂ) := by
+      rw [mul_comm]
+      norm_num
+    rw [harg]
+    rw [h]
+    have hs : Real.sin (2 * Real.pi * x / 2) = Real.sin (Real.pi * x) := by
+      ring_nf
+    rw [hs]
+    rw [mul_pow, sq_abs]
+    ring_nf
+  rw [hnorm_sub_one, hnorm_sub_one] at hmul
   have hden_sq_ne : 4 * Real.sin (Real.pi * delta) ^ 2 ≠ 0 := by
     nlinarith [sq_pos_of_ne_zero hden]
   have hsinarg : Real.sin (Real.pi * ((N : ℝ) * delta)) =
@@ -1642,43 +1423,7 @@ theorem qpeApproxOutcomeProbability_total (m : ℕ) (theta : ℝ) :
     exact Matrix.isUnitary_mul_isNormalized
       (inverseQFTMatrix_isUnitary m)
       (phaseState_isNormalized m theta)
-  exact QuantumLibrary.computational_measurement_total_probability hs
-
-/-- Concrete exact-QPE state correctness: the counting register is exactly `|y⟩`. -/
-theorem exactQPEStateConcrete_eq_basis_tensor_eigenstate {n : ℕ} {m : ℕ} {U : Square n}
-    {ψ : Vector n} {y : Fin (M m)}
-    (heigen : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ) :
-    (inverseQFTMatrix m ⊗ (I n)) ⬝
-        (controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ)) = Vector.basis y ⊗ ψ := by
-  rw [controlledPowerMatrix_mul_uniform_of_real_eigenphase heigen]
-  rw [Matrix.kron_mul]
-  rw [inverseQFTMatrix_mul_phaseState]
-  simp [Matrix.mul]
-
-/-- Concrete exact-QPE measurement correctness for any target basis index. -/
-theorem exactQPEConcrete_joint_probability {n : ℕ} {m : ℕ} {U : Square n}
-    {ψ : Vector n} {y : Fin (M m)} (j : Fin n)
-    (heigen : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ) :
-    Measurement.prob
-        ((inverseQFTMatrix m ⊗ (I n)) ⬝
-          (controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ)))
-        (finProdFinEquiv (y, j)) = Measurement.prob ψ j := by
-  rw [exactQPEStateConcrete_eq_basis_tensor_eigenstate heigen]
-  rw [Measurement.prob_kron_apply]
-  simp
-
-/-- Concrete exact-QPE success probability when the target state is deterministic
-at basis index `j`. -/
-theorem exactQPEConcrete_success_probability_one_of_target_basis {n : ℕ} {m : ℕ}
-    {U : Square n} {ψ : Vector n} {y : Fin (M m)} {j : Fin n}
-    (heigen : U ⬝ ψ = ((Real.fourierChar ((y : ℕ) / (M m : ℝ)) : ℂ)) • ψ)
-    (hψj : Measurement.prob ψ j = 1) :
-    Measurement.prob
-        ((inverseQFTMatrix m ⊗ (I n)) ⬝
-          (controlledPowerMatrix m U ⬝ (uniformState m ⊗ ψ)))
-        (finProdFinEquiv (y, j)) = 1 := by
-  rw [exactQPEConcrete_joint_probability j heigen]
-  exact hψj
+  exact Measurement.sum_prob_of_isNormalized hs
 
 /-- The matrix-level approximate-QPE probability equals the standard sine-ratio
 geometric probability for any outcome whose sine denominator is nonzero. -/
