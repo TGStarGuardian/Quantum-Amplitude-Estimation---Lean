@@ -10,40 +10,18 @@ open Filter
 namespace QAE
 namespace QPE
 
-/-- Real cotangent agrees with complex cotangent on real inputs. -/
-lemma ofReal_cot (x : ℝ) : ((Real.cot x : ℝ) : ℂ) = Complex.cot (x : ℂ) := by
-  rw [Real.cot_eq_cos_div_sin]
-  simp [Complex.cot, Complex.ofReal_div, Complex.ofReal_sin, Complex.ofReal_cos]
-
-lemma complex_inv_sub_natCast_ofReal (z : ℝ) (n : ℕ) :
-    1 / ((z : ℂ) - (n + 1)) =
-      ((1 / (z - ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
-  have hden : (z : ℂ) - (n + 1) = ((z - ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
-    norm_num
-  rw [hden]
-  simp [one_div, Complex.ofReal_inv]
-
-lemma complex_inv_add_natCast_ofReal (z : ℝ) (n : ℕ) :
-    1 / ((z : ℂ) + (n + 1)) =
-      ((1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
-  have hden : (z : ℂ) + (n + 1) = ((z + ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
-    norm_num
-  rw [hden]
-  simp [one_div, Complex.ofReal_inv]
-
 lemma cotTerm_realPart (z : ℝ) (n : ℕ) :
     (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))).re =
       1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ)) := by
   have hcomplex :
       1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1)) =
         ((1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
-    calc
-      1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))
-          = ((1 / (z - ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) +
-              ((1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
-              rw [complex_inv_sub_natCast_ofReal, complex_inv_add_natCast_ofReal]
-      _ = ((1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
-          simp
+    have hsub : (z : ℂ) - (n + 1) = ((z - ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
+      norm_num
+    have hadd : (z : ℂ) + (n + 1) = ((z + ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
+      norm_num
+    rw [hsub, hadd]
+    simp [one_div, Complex.ofReal_inv]
   change (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))).re =
     ((1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ).re
   exact congrArg Complex.re hcomplex
@@ -68,7 +46,7 @@ lemma real_cot_series_rep' {z : ℝ} (hz : (z : ℂ) ∈ Complex.integerCompleme
       simp [Complex.ofReal_mul]
     have hleftC : (Real.pi : ℂ) * (((Real.pi : ℂ) * (z : ℂ))).cot - 1 / (z : ℂ) =
         ((Real.pi * Real.cot (Real.pi * z) - 1 / z : ℝ) : ℂ) := by
-      rw [harg, ← ofReal_cot]
+      rw [harg, ← Complex.ofReal_cot]
       simp [Complex.ofReal_mul, Complex.ofReal_sub, Complex.ofReal_inv, one_div]
     change (((Real.pi : ℂ) * (((Real.pi : ℂ) * (z : ℂ))).cot - 1 / (z : ℂ))).re =
       ((Real.pi * Real.cot (Real.pi * z) - 1 / z : ℝ) : ℂ).re
@@ -397,12 +375,6 @@ lemma bhmtHalfOneMinus_mem_integerComplement {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u 
   have hnreal_ge_one : (1 : ℝ) ≤ n := by exact_mod_cast hn_ge_one
   nlinarith
 
-lemma bhmtCot_half_one_minus_eq_tan {u : ℝ} :
-    Real.cot (Real.pi * ((1 - u) / 2)) = Real.tan (Real.pi * u / 2) := by
-  rw [Real.cot_eq_cos_div_sin, Real.tan_eq_sin_div_cos]
-  have harg : Real.pi * ((1 - u) / 2) = Real.pi / 2 - Real.pi * u / 2 := by ring
-  rw [harg, Real.cos_pi_div_two_sub, Real.sin_pi_div_two_sub]
-
 lemma bhmtTan_base_poles {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     1 / ((1 - u) / 2) + 1 / ((1 - u) / 2 - 1) = 4 * u / (1 - u ^ 2) := by
   have hminus : (1 - u) / 2 - 1 = -((1 + u) / 2) := by ring
@@ -431,7 +403,12 @@ theorem bhmtTanPartialFractionIdentity_of_bounds {u : ℝ} (hu0 : 0 ≤ u) (hu1 
   have hreg := bhmtRealCotTerm_tsum_regroup (u := u) hf hg
   have htail := bhmtTanGroupedTerm_tsum hu0 hu1
   unfold bhmtTanPartialFractionIdentity
-  rw [← bhmtCot_half_one_minus_eq_tan (u := u)]
+  have hcot_tan :
+      Real.cot (Real.pi * ((1 - u) / 2)) = Real.tan (Real.pi * u / 2) := by
+    rw [Real.cot_eq_cos_div_sin, Real.tan_eq_sin_div_cos]
+    have harg : Real.pi * ((1 - u) / 2) = Real.pi / 2 - Real.pi * u / 2 := by ring
+    rw [harg, Real.cos_pi_div_two_sub, Real.sin_pi_div_two_sub]
+  rw [← hcot_tan]
   have hseries :
       (∑' n : ℕ, (1 / ((1 - u) / 2 - ((n + 1 : ℕ) : ℝ)) +
         1 / ((1 - u) / 2 + ((n + 1 : ℕ) : ℝ)))) =

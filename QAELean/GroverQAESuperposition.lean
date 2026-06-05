@@ -55,17 +55,17 @@ theorem qaeCoeffMinus_normSq (theta : ℝ) :
 eigenstates. -/
 theorem qaePlaneVector_eq_eigen_superposition (theta : ℝ) :
     QuantumLibrary.qaePlaneVector theta =
-      qaeCoeffPlus theta • planeEigenPlus + qaeCoeffMinus theta • planeEigenMinus := by
+      qaeCoeffPlus theta • ketMinusI + qaeCoeffMinus theta • ketPlusI := by
   ext i j
   fin_cases i <;> fin_cases j
-  · simp [QuantumLibrary.qaePlaneVector, qaeCoeffPlus, qaeCoeffMinus, planeEigenPlus,
-      planeEigenMinus]
+  · simp [QuantumLibrary.qaePlaneVector, qaeCoeffPlus, qaeCoeffMinus, ketMinusI,
+      ketPlusI]
     ring_nf
     rw [sq]
     rw [invSqrt2_mul_self]
     ring
-  · simp [QuantumLibrary.qaePlaneVector, qaeCoeffPlus, qaeCoeffMinus, planeEigenPlus,
-      planeEigenMinus]
+  · simp [QuantumLibrary.qaePlaneVector, qaeCoeffPlus, qaeCoeffMinus, ketMinusI,
+      ketPlusI]
     ring_nf
     rw [Complex.I_sq]
     rw [sq]
@@ -88,18 +88,18 @@ superposition of the two QPE eigenphase output states. -/
 theorem qpeOutput_groverPlane_initial_eq_eigenphase_superposition
     (m : ℕ) (theta : ℝ) :
     (QPE.inverseQFTMatrix m ⊗ (I 2)) ⬝
-        (QPE.controlledPowerMatrix m (groverPlaneRotation theta) ⬝
+        (QPE.controlledPowerMatrix m (Ry (4 * theta)) ⬝
           (QPE.uniformState m ⊗ QuantumLibrary.qaePlaneVector theta)) =
       qaeCoeffPlus theta •
-          ((QPE.inverseQFTMatrix m ⬝ QPE.phaseState m (theta / Real.pi)) ⊗ planeEigenPlus) +
+          ((QPE.inverseQFTMatrix m ⬝ QPE.phaseState m (theta / Real.pi)) ⊗ ketMinusI) +
         qaeCoeffMinus theta •
-          ((QPE.inverseQFTMatrix m ⬝ QPE.phaseState m (-(theta / Real.pi))) ⊗ planeEigenMinus) := by
+          ((QPE.inverseQFTMatrix m ⬝ QPE.phaseState m (-(theta / Real.pi))) ⊗ ketPlusI) := by
   rw [qaePlaneVector_eq_eigen_superposition]
   rw [qpeOutputStateConcrete_linear_combination]
   rw [QPE.controlledPowerMatrix_mul_uniform_of_real_eigenphase
-    (groverPlaneRotation_eigen_plus theta)]
+    (Ry_ketMinusI_eigen theta)]
   rw [QPE.controlledPowerMatrix_mul_uniform_of_real_eigenphase
-    (groverPlaneRotation_eigen_minus theta)]
+    (Ry_ketPlusI_eigen theta)]
   rw [Matrix.kron_mul, Matrix.kron_mul]
   simp [Matrix.mul]
 
@@ -107,54 +107,40 @@ theorem qpeOutput_groverPlane_initial_eq_eigenphase_superposition
 def qpeCountingMarginal {n m : ℕ} (state : Vector (QPE.M m * n)) (y : Fin (QPE.M m)) : ℝ :=
   ∑ j : Fin n, Measurement.prob state (finProdFinEquiv (y, j))
 
-theorem groverPlane_two_branch_normSq_sum (a b : ℂ) :
-    Complex.normSq (invSqrt2 * (a + b)) +
-      Complex.normSq (invSqrt2 * (-Complex.I * a + Complex.I * b)) =
-        Complex.normSq a + Complex.normSq b := by
-  rw [Complex.normSq_mul, normSq_invSqrt2]
-  rw [Complex.normSq_mul, normSq_invSqrt2]
-  rw [Complex.normSq_add, Complex.normSq_add]
-  simp [Complex.normSq_mul, Complex.normSq_neg, Complex.normSq_I]
-  ring_nf
-
-theorem groverPlane_two_branch_normSq_sum_coeff
-    (cp cm dp dm : ℂ)
-    (hcp : Complex.normSq cp = (1 / 2 : ℝ))
-    (hcm : Complex.normSq cm = (1 / 2 : ℝ)) :
-    Complex.normSq (cp * (dp * invSqrt2) + cm * (dm * invSqrt2)) +
-      Complex.normSq (-(cp * (dp * (Complex.I * invSqrt2))) +
-        cm * (dm * (Complex.I * invSqrt2))) =
-        (1 / 2 : ℝ) * Complex.normSq dp + (1 / 2 : ℝ) * Complex.normSq dm := by
-  have h := groverPlane_two_branch_normSq_sum (cp * dp) (cm * dm)
-  have hleft :
-      Complex.normSq (cp * (dp * invSqrt2) + cm * (dm * invSqrt2)) +
-        Complex.normSq (-(cp * (dp * (Complex.I * invSqrt2))) +
-          cm * (dm * (Complex.I * invSqrt2))) =
-      Complex.normSq (cp * dp) + Complex.normSq (cm * dm) := by
-    convert h using 1
-    ring_nf
-  rw [hleft]
-  rw [Complex.normSq_mul, Complex.normSq_mul, hcp, hcm]
-
 /-- The counting-register marginal of QPE on the initial Grover-plane state is
 the average of the two QPE eigenphase distributions. -/
 theorem qpeCountingMarginal_groverPlane_initial
     (m : ℕ) (theta : ℝ) (y : Fin (QPE.M m)) :
     qpeCountingMarginal
         ((QPE.inverseQFTMatrix m ⊗ (I 2)) ⬝
-          (QPE.controlledPowerMatrix m (groverPlaneRotation theta) ⬝
+          (QPE.controlledPowerMatrix m (Ry (4 * theta)) ⬝
             (QPE.uniformState m ⊗ QuantumLibrary.qaePlaneVector theta))) y =
       (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y +
         (1 / 2 : ℝ) * QPE.qpeApproxOutcomeProbability m (-(theta / Real.pi)) y := by
   unfold qpeCountingMarginal
   rw [qpeOutput_groverPlane_initial_eq_eigenphase_superposition]
   have hcol : (finProdFinEquiv.symm (0 : Fin (1 * 1))).1 = (0 : Fin 1) := Subsingleton.elim _ _
-  simp [Measurement.prob, Matrix.kron, planeEigenPlus, planeEigenMinus,
+  simp [Measurement.prob, Matrix.kron, ketMinusI, ketPlusI,
     QPE.qpeApproxOutcomeProbability, QPE.qpeApproxAmplitude, Fin.sum_univ_two, hcol]
-  rw [groverPlane_two_branch_normSq_sum_coeff]
-  · ring_nf
-  · exact qaeCoeffPlus_normSq theta
-  · exact qaeCoeffMinus_normSq theta
+  have hmix (cp cm dp dm : ℂ) :
+      Complex.normSq (cp * (dp * invSqrt2) + cm * (dm * invSqrt2)) +
+        Complex.normSq (-(cp * (dp * (Complex.I * invSqrt2))) +
+          cm * (dm * (Complex.I * invSqrt2))) =
+          Complex.normSq (cp * dp) + Complex.normSq (cm * dm) := by
+    have h :
+        Complex.normSq (invSqrt2 * (cp * dp + cm * dm)) +
+          Complex.normSq (invSqrt2 * (-Complex.I * (cp * dp) + Complex.I * (cm * dm))) =
+            Complex.normSq (cp * dp) + Complex.normSq (cm * dm) := by
+      rw [Complex.normSq_mul, normSq_invSqrt2]
+      rw [Complex.normSq_mul, normSq_invSqrt2]
+      rw [Complex.normSq_add, Complex.normSq_add]
+      simp [Complex.normSq_mul, Complex.normSq_neg, Complex.normSq_I]
+      ring_nf
+    convert h using 1; ring_nf
+  rw [hmix]
+  rw [Complex.normSq_mul, Complex.normSq_mul, qaeCoeffPlus_normSq theta,
+    qaeCoeffMinus_normSq theta]
+  ring_nf
 
 end Grover
 end QAE
