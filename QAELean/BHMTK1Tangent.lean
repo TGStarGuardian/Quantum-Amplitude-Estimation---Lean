@@ -10,51 +10,16 @@ open Filter
 namespace QAE
 namespace QPE
 
-/-- Real-valued cotangent Mittag-Leffler expansion obtained from Mathlib's complex
-`cot_series_rep'` by taking real parts. -/
-lemma real_cot_series_rep' {z : ℝ} (hz : (z : ℂ) ∈ Complex.integerComplement) :
-    Real.pi * Real.cot (Real.pi * z) - 1 / z =
-      ∑' n : ℕ, (1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ))) := by
-  have hc := cot_series_rep' (x := (z : ℂ)) hz
-  have hs : Summable fun n : ℕ =>
-      (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))) := by
-    exact summable_cotTerm hz
-  have hmap := ContinuousLinearMap.map_tsum Complex.reCLM hs
-  have hre : (((Real.pi : ℂ) * (((Real.pi : ℂ) * (z : ℂ))).cot - 1 / (z : ℂ))).re =
-      ∑' n : ℕ, Complex.reCLM (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))) := by
-    rw [← hmap]
-    exact congrArg Complex.re hc
-  have hleft : (((Real.pi : ℂ) * (((Real.pi : ℂ) * (z : ℂ))).cot - 1 / (z : ℂ))).re =
-      Real.pi * Real.cot (Real.pi * z) - 1 / z := by
-    have harg : ((Real.pi : ℂ) * (z : ℂ)) = ((Real.pi * z : ℝ) : ℂ) := by
-      simp [Complex.ofReal_mul]
-    have hleftC : (Real.pi : ℂ) * (((Real.pi : ℂ) * (z : ℂ))).cot - 1 / (z : ℂ) =
-        ((Real.pi * Real.cot (Real.pi * z) - 1 / z : ℝ) : ℂ) := by
-      rw [harg, ← Complex.ofReal_cot]
-      simp [Complex.ofReal_mul, Complex.ofReal_sub, Complex.ofReal_inv, one_div]
-    change (((Real.pi : ℂ) * (((Real.pi : ℂ) * (z : ℂ))).cot - 1 / (z : ℂ))).re =
-      ((Real.pi * Real.cot (Real.pi * z) - 1 / z : ℝ) : ℂ).re
-    exact congrArg Complex.re hleftC
-  rw [hleft] at hre
-  rw [show (∑' n : ℕ, Complex.reCLM (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1)))) =
-      ∑' n : ℕ, (1 / (z - ((n + 1 : ℕ) : ℝ)) + 1 / (z + ((n + 1 : ℕ) : ℝ))) by
-        apply tsum_congr
-        intro n
-        have hcomplex :
-            1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1)) =
-              ((1 / (z - ((n + 1 : ℕ) : ℝ)) +
-                1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
-          have hsub : (z : ℂ) - (n + 1) = ((z - ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
-            norm_num
-          have hadd : (z : ℂ) + (n + 1) = ((z + ((n + 1 : ℕ) : ℝ) : ℝ) : ℂ) := by
-            norm_num
-          rw [hsub, hadd]
-          simp [one_div, Complex.ofReal_inv]
-        change (1 / ((z : ℂ) - (n + 1)) + 1 / ((z : ℂ) + (n + 1))).re =
-          ((1 / (z - ((n + 1 : ℕ) : ℝ)) +
-            1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ).re
-        exact congrArg Complex.re hcomplex] at hre
-  exact hre
+private lemma bhmtTanOddTail_den_pos {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) (n : ℕ) :
+    0 < (((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 - u ^ 2) := by
+  have hu1sq : u ^ 2 < 1 := by
+    rw [sq_lt_one_iff_abs_lt_one, abs_of_nonneg hu0]
+    exact hu1
+  have hnNat : 1 ≤ 2 * (n + 2) - 1 := by omega
+  have hn : (1 : ℝ) ≤ ((2 * (n + 2) - 1 : ℕ) : ℝ) := by exact_mod_cast hnNat
+  have hsquare : (1 : ℝ) ≤ ((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 := by
+    nlinarith [sq_nonneg (((2 * (n + 2) - 1 : ℕ) : ℝ)), hn]
+  nlinarith
 
 lemma bhmtTanOddTail_term_bound {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) (n : ℕ) :
     1 / (((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 - u ^ 2) ≤
@@ -62,12 +27,8 @@ lemma bhmtTanOddTail_term_bound {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) (n : ℕ
   have hu1sq : u ^ 2 < 1 := by
     rw [sq_lt_one_iff_abs_lt_one, abs_of_nonneg hu0]
     exact hu1
-  have hleftpos : 0 < (((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 - u ^ 2) := by
-    have hnNat : 1 ≤ 2 * (n + 2) - 1 := by omega
-    have hn : (1 : ℝ) ≤ ((2 * (n + 2) - 1 : ℕ) : ℝ) := by exact_mod_cast hnNat
-    have hsquare : (1 : ℝ) ≤ ((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 := by
-      nlinarith [sq_nonneg (((2 * (n + 2) - 1 : ℕ) : ℝ)), hn]
-    nlinarith
+  have hleftpos : 0 < (((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 - u ^ 2) :=
+    bhmtTanOddTail_den_pos hu0 hu1 n
   have hrightpos : 0 < 2 * (1 + u ^ 2) * ((n + 2 : ℕ) : ℝ) * ((n + 1 : ℕ) : ℝ) := by
     positivity
   rw [one_div_le_one_div hleftpos hrightpos]
@@ -80,24 +41,29 @@ lemma bhmtTanOddTail_term_bound {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) (n : ℕ
     positivity
   nlinarith
 
-lemma bhmtInvNatSuccMulSuccSucc_telescope_aux (n : ℕ) :
-    (1 / ((n + 1 : ℕ) : ℝ) - 1 / ((n + 2 : ℕ) : ℝ)) =
-      1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ)) := by
-  field_simp [show ((n + 1 : ℕ) : ℝ) ≠ 0 by positivity,
-    show ((n + 2 : ℕ) : ℝ) ≠ 0 by positivity]
-  norm_num
-
 lemma bhmtInvNatSuccMulSuccSucc_sum_telescope (N : ℕ) :
     (∑ n ∈ Finset.range N, 1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ))) =
       1 - 1 / ((N + 1 : ℕ) : ℝ) := by
-  induction N with
-  | zero => simp
-  | succ N ih =>
-      rw [Finset.sum_range_succ, ih]
-      rw [← bhmtInvNatSuccMulSuccSucc_telescope_aux N]
-      field_simp [show ((N + 1 : ℕ) : ℝ) ≠ 0 by positivity,
-        show ((N + 2 : ℕ) : ℝ) ≠ 0 by positivity]
-      ring_nf
+  calc
+    (∑ n ∈ Finset.range N, 1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ)))
+        = ∑ n ∈ Finset.range N,
+            ((fun k : ℕ => - (1 / (((k + 1 : ℕ) : ℝ)))) (n + 1) -
+              (fun k : ℕ => - (1 / (((k + 1 : ℕ) : ℝ)))) n) := by
+            apply Finset.sum_congr rfl
+            intro n hn
+            have h1 : (((n + 1 : ℕ) : ℝ)) ≠ 0 := by positivity
+            have h2 : (((n + 2 : ℕ) : ℝ)) ≠ 0 := by positivity
+            have hdiff :
+                1 / (((n + 1 : ℕ) : ℝ) * ((n + 2 : ℕ) : ℝ)) =
+                  1 / ((n + 1 : ℕ) : ℝ) - 1 / ((n + 2 : ℕ) : ℝ) := by
+              rw [one_div, one_div, one_div, inv_sub_inv h1 h2]
+              norm_num
+            rw [hdiff]
+            ring
+    _ = - (1 / (((N + 1 : ℕ) : ℝ))) - - (1 / (((0 + 1 : ℕ) : ℝ))) := by
+            simpa using Finset.sum_range_sub
+              (fun k : ℕ => - (1 / (((k + 1 : ℕ) : ℝ)))) N
+    _ = 1 - 1 / ((N + 1 : ℕ) : ℝ) := by ring
 
 /-- The odd-denominator tail appearing in the tangent partial-fraction proof of the
 BHMT `k = 1` core inequality.  Index `n` represents the paper's integer `n + 2`,
@@ -105,31 +71,21 @@ so this is the sum over `n ≥ 2`. -/
 def bhmtTanOddTail (u : ℝ) (n : ℕ) : ℝ :=
   1 / (((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 - u ^ 2)
 
-/-- The real tangent partial-fraction identity used by the shared proof.  This is
-kept as a named hypothesis until the remaining bridge from Mathlib's complex
-`cot_series_rep` theorem to this real odd-denominator tangent expansion is
-formalized. -/
+/-- The real tangent partial-fraction identity used by the shared proof.  The theorem
+`bhmtTanPartialFractionIdentity_of_bounds` derives it from Mathlib's complex
+`cot_series_rep` theorem by real-part projection and odd-pole regrouping. -/
 def bhmtTanPartialFractionIdentity (u : ℝ) : Prop :=
   Real.pi * Real.tan (Real.pi * u / 2) =
     4 * u / (1 - u ^ 2) + 4 * u * (∑' n : ℕ, bhmtTanOddTail u n)
 
-lemma bhmtTanOddTail_nonneg {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) (n : ℕ) :
-    0 ≤ bhmtTanOddTail u n := by
-  unfold bhmtTanOddTail
-  have hu1sq : u ^ 2 < 1 := by
-    rw [sq_lt_one_iff_abs_lt_one, abs_of_nonneg hu0]
-    exact hu1
-  have hleftpos : 0 < (((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 - u ^ 2) := by
-    have hnNat : 1 ≤ 2 * (n + 2) - 1 := by omega
-    have hn : (1 : ℝ) ≤ ((2 * (n + 2) - 1 : ℕ) : ℝ) := by exact_mod_cast hnNat
-    have hsquare : (1 : ℝ) ≤ ((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 := by
-      nlinarith [sq_nonneg (((2 * (n + 2) - 1 : ℕ) : ℝ)), hn]
-    nlinarith
-  positivity
-
 lemma bhmtTanOddTail_summable {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     Summable (fun n : ℕ => bhmtTanOddTail u n) := by
-  have hnonneg : ∀ n, 0 ≤ bhmtTanOddTail u n := bhmtTanOddTail_nonneg hu0 hu1
+  have hnonneg : ∀ n, 0 ≤ bhmtTanOddTail u n := by
+    intro n
+    unfold bhmtTanOddTail
+    have hleftpos : 0 < (((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 - u ^ 2) :=
+      bhmtTanOddTail_den_pos hu0 hu1 n
+    positivity
   refine summable_of_sum_range_le (c := 1 / (2 * (1 + u ^ 2))) hnonneg ?_
   intro N
   have hsum_bound :
@@ -169,7 +125,12 @@ lemma bhmtTanOddTail_summable {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
 
 lemma bhmtTanOddTail_tsum_le {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     (∑' n : ℕ, bhmtTanOddTail u n) ≤ 1 / (2 * (1 + u ^ 2)) := by
-  have hnonneg : ∀ n, 0 ≤ bhmtTanOddTail u n := bhmtTanOddTail_nonneg hu0 hu1
+  have hnonneg : ∀ n, 0 ≤ bhmtTanOddTail u n := by
+    intro n
+    unfold bhmtTanOddTail
+    have hleftpos : 0 < (((2 * (n + 2) - 1 : ℕ) : ℝ) ^ 2 - u ^ 2) :=
+      bhmtTanOddTail_den_pos hu0 hu1 n
+    positivity
   apply Real.tsum_le_of_sum_range_le hnonneg
   intro N
   have hsum_bound :
@@ -197,7 +158,6 @@ lemma bhmtTanOddTail_tsum_le {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     rw [bhmtInvNatSuccMulSuccSucc_sum_telescope]
     have hpos : 0 < ((N + 1 : ℕ) : ℝ) := by positivity
     nlinarith [one_div_pos.mpr hpos]
-  have hcoef_nonneg : 0 ≤ (1 / (2 * (1 + u ^ 2)) : ℝ) := by positivity
   calc
     (∑ n ∈ Finset.range N, bhmtTanOddTail u n)
         ≤ ∑ n ∈ Finset.range N,
@@ -244,9 +204,27 @@ lemma bhmtRealCotTerm_summable {z : ℝ}
       1 / (z + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ).re
   exact congrArg Complex.re hcomplex
 
-lemma bhmtRealCotTerm_summable_of_bounds {u : ℝ} (_hu0 : 0 ≤ u) (_hu1 : u < 1)
-    (hz : (((1 - u) / 2 : ℝ) : ℂ) ∈ Complex.integerComplement) :
+lemma bhmtHalfOneMinus_mem_integerComplement {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
+    (((1 - u) / 2 : ℝ) : ℂ) ∈ Complex.integerComplement := by
+  rw [Complex.mem_integerComplement_iff]
+  rintro ⟨n, hn⟩
+  have hre : (n : ℝ) = (1 - u) / 2 := by
+    have h := congrArg Complex.re hn
+    simpa using h
+  have hzpos : 0 < (1 - u) / 2 := by linarith
+  have hzle : (1 - u) / 2 ≤ 1 / 2 := by nlinarith
+  have hn_int_pos : (0 : ℤ) < n := by
+    by_contra hnot
+    have hnle : n ≤ 0 := le_of_not_gt hnot
+    have hnreal : (n : ℝ) ≤ 0 := by exact_mod_cast hnle
+    linarith
+  have hn_ge_one : (1 : ℤ) ≤ n := by omega
+  have hnreal_ge_one : (1 : ℝ) ≤ n := by exact_mod_cast hn_ge_one
+  nlinarith
+
+lemma bhmtRealCotTerm_summable_of_bounds {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     Summable (bhmtRealCotTerm u) := by
+  have hz := bhmtHalfOneMinus_mem_integerComplement hu0 hu1
   have hs := bhmtRealCotTerm_summable (z := (1 - u) / 2) hz
   refine hs.congr ?_
   intro n
@@ -322,10 +300,11 @@ lemma bhmtRealCotTerm_endpoint_tendsto_zero (u : ℝ) :
     exact tendsto_const_nhds.add_atTop hcast
   simpa [one_div] using hN.inv_tendsto_atTop
 
-lemma bhmtRealCotTerm_tsum_regroup {u : ℝ}
-    (hf : Summable (bhmtRealCotTerm u)) (hg : Summable (bhmtTanGroupedTerm u)) :
+lemma bhmtRealCotTerm_tsum_regroup {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     (∑' k : ℕ, bhmtRealCotTerm u k) =
       1 / ((1 - u) / 2 - 1) + (∑' n : ℕ, bhmtTanGroupedTerm u n) := by
+  have hf : Summable (bhmtRealCotTerm u) := bhmtRealCotTerm_summable_of_bounds hu0 hu1
+  have hg : Summable (bhmtTanGroupedTerm u) := bhmtTanGroupedTerm_summable hu0 hu1
   have hF : Tendsto (fun N : ℕ => ∑ k ∈ Finset.range (N + 1), bhmtRealCotTerm u k) atTop
       (𝓝 (∑' k : ℕ, bhmtRealCotTerm u k)) := by
     have h := hf.hasSum.tendsto_sum_nat.comp (tendsto_add_atTop_nat 1)
@@ -351,24 +330,6 @@ lemma bhmtRealCotTerm_tsum_regroup {u : ℝ}
   have hEq := tendsto_nhds_unique hF' hG
   simpa using hEq
 
-lemma bhmtHalfOneMinus_mem_integerComplement {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
-    (((1 - u) / 2 : ℝ) : ℂ) ∈ Complex.integerComplement := by
-  rw [Complex.mem_integerComplement_iff]
-  rintro ⟨n, hn⟩
-  have hre : (n : ℝ) = (1 - u) / 2 := by
-    have h := congrArg Complex.re hn
-    simpa using h
-  have hzpos : 0 < (1 - u) / 2 := by linarith
-  have hzle : (1 - u) / 2 ≤ 1 / 2 := by nlinarith
-  have hn_int_pos : (0 : ℤ) < n := by
-    by_contra hnot
-    have hnle : n ≤ 0 := le_of_not_gt hnot
-    have hnreal : (n : ℝ) ≤ 0 := by exact_mod_cast hnle
-    linarith
-  have hn_ge_one : (1 : ℤ) ≤ n := by omega
-  have hnreal_ge_one : (1 : ℝ) ≤ n := by exact_mod_cast hn_ge_one
-  nlinarith
-
 lemma bhmtTan_base_poles {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     1 / ((1 - u) / 2) + 1 / ((1 - u) / 2 - 1) = 4 * u / (1 - u ^ 2) := by
   have hminus : (1 - u) / 2 - 1 = -((1 + u) / 2) := by ring
@@ -391,10 +352,75 @@ and odd-pole regrouping. -/
 theorem bhmtTanPartialFractionIdentity_of_bounds {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     bhmtTanPartialFractionIdentity u := by
   have hz := bhmtHalfOneMinus_mem_integerComplement hu0 hu1
-  have hcot := real_cot_series_rep' (z := (1 - u) / 2) hz
-  have hf := bhmtRealCotTerm_summable_of_bounds hu0 hu1 hz
-  have hg := bhmtTanGroupedTerm_summable hu0 hu1
-  have hreg := bhmtRealCotTerm_tsum_regroup (u := u) hf hg
+  have hcot :
+      Real.pi * Real.cot (Real.pi * ((1 - u) / 2)) - 1 / ((1 - u) / 2) =
+        ∑' n : ℕ, (1 / ((1 - u) / 2 - ((n + 1 : ℕ) : ℝ)) +
+          1 / ((1 - u) / 2 + ((n + 1 : ℕ) : ℝ))) := by
+    have hc := cot_series_rep' (x := (((1 - u) / 2 : ℝ) : ℂ)) hz
+    have hs : Summable fun n : ℕ =>
+        (1 / ((((1 - u) / 2 : ℝ) : ℂ) - (n + 1)) +
+          1 / ((((1 - u) / 2 : ℝ) : ℂ) + (n + 1))) := by
+      exact summable_cotTerm hz
+    have hmap := ContinuousLinearMap.map_tsum Complex.reCLM hs
+    have hre :
+        (((Real.pi : ℂ) * (((Real.pi : ℂ) * (((1 - u) / 2 : ℝ) : ℂ))).cot -
+            1 / (((1 - u) / 2 : ℝ) : ℂ))).re =
+          ∑' n : ℕ, Complex.reCLM
+            (1 / ((((1 - u) / 2 : ℝ) : ℂ) - (n + 1)) +
+              1 / ((((1 - u) / 2 : ℝ) : ℂ) + (n + 1))) := by
+      rw [← hmap]
+      exact congrArg Complex.re hc
+    have hleft :
+        (((Real.pi : ℂ) * (((Real.pi : ℂ) * (((1 - u) / 2 : ℝ) : ℂ))).cot -
+            1 / (((1 - u) / 2 : ℝ) : ℂ))).re =
+          Real.pi * Real.cot (Real.pi * ((1 - u) / 2)) - 1 / ((1 - u) / 2) := by
+      have harg :
+          ((Real.pi : ℂ) * (((1 - u) / 2 : ℝ) : ℂ)) =
+            ((Real.pi * ((1 - u) / 2) : ℝ) : ℂ) := by
+        simp [Complex.ofReal_mul]
+      have hleftC :
+          (Real.pi : ℂ) * (((Real.pi : ℂ) * (((1 - u) / 2 : ℝ) : ℂ))).cot -
+              1 / (((1 - u) / 2 : ℝ) : ℂ) =
+            ((Real.pi * Real.cot (Real.pi * ((1 - u) / 2)) -
+              1 / ((1 - u) / 2) : ℝ) : ℂ) := by
+        rw [harg, ← Complex.ofReal_cot]
+        simp [Complex.ofReal_mul, Complex.ofReal_sub, one_div]
+      change (((Real.pi : ℂ) * (((Real.pi : ℂ) * (((1 - u) / 2 : ℝ) : ℂ))).cot -
+          1 / (((1 - u) / 2 : ℝ) : ℂ))).re =
+        ((Real.pi * Real.cot (Real.pi * ((1 - u) / 2)) -
+          1 / ((1 - u) / 2) : ℝ) : ℂ).re
+      exact congrArg Complex.re hleftC
+    have hright :
+        (∑' n : ℕ, Complex.reCLM
+          (1 / ((((1 - u) / 2 : ℝ) : ℂ) - (n + 1)) +
+            1 / ((((1 - u) / 2 : ℝ) : ℂ) + (n + 1)))) =
+          ∑' n : ℕ, (1 / ((1 - u) / 2 - ((n + 1 : ℕ) : ℝ)) +
+            1 / ((1 - u) / 2 + ((n + 1 : ℕ) : ℝ))) := by
+      apply tsum_congr
+      intro n
+      have hcomplex :
+          1 / ((((1 - u) / 2 : ℝ) : ℂ) - (n + 1)) +
+              1 / ((((1 - u) / 2 : ℝ) : ℂ) + (n + 1)) =
+            ((1 / ((1 - u) / 2 - ((n + 1 : ℕ) : ℝ)) +
+              1 / ((1 - u) / 2 + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ) := by
+        have hsub :
+            (((1 - u) / 2 : ℝ) : ℂ) - (n + 1) =
+              ((((1 - u) / 2 - ((n + 1 : ℕ) : ℝ) : ℝ)) : ℂ) := by
+          norm_num
+        have hadd :
+            (((1 - u) / 2 : ℝ) : ℂ) + (n + 1) =
+              ((((1 - u) / 2 + ((n + 1 : ℕ) : ℝ) : ℝ)) : ℂ) := by
+          norm_num
+        rw [hsub, hadd]
+        simp [one_div, Complex.ofReal_inv]
+      change (1 / ((((1 - u) / 2 : ℝ) : ℂ) - (n + 1)) +
+          1 / ((((1 - u) / 2 : ℝ) : ℂ) + (n + 1))).re =
+        ((1 / ((1 - u) / 2 - ((n + 1 : ℕ) : ℝ)) +
+          1 / ((1 - u) / 2 + ((n + 1 : ℕ) : ℝ)) : ℝ) : ℂ).re
+      exact congrArg Complex.re hcomplex
+    rw [hleft, hright] at hre
+    exact hre
+  have hreg := bhmtRealCotTerm_tsum_regroup hu0 hu1
   have htail := bhmtTanGroupedTerm_tsum hu0 hu1
   unfold bhmtTanPartialFractionIdentity
   have hcot_tan :
@@ -461,10 +487,11 @@ lemma deriv_bhmtK1TwoNearestCore_eq_neg_log_factor
   ring_nf
 
 lemma bhmt_log_derivative_expr_nonneg_of_tan_series
-    {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1)
-    (htan : bhmtTanPartialFractionIdentity u) :
+    {u : ℝ} (hu0 : 0 ≤ u) (hu1 : u < 1) :
     0 ≤ 2 * u / (1 + u ^ 2) + 4 * u / (1 - u ^ 2) -
       Real.pi * Real.tan (Real.pi * u / 2) := by
+  have htan : bhmtTanPartialFractionIdentity u :=
+    bhmtTanPartialFractionIdentity_of_bounds hu0 hu1
   have htail := bhmtTanOddTail_tsum_le hu0 hu1
   have hmul : 4 * u * (∑' n : ℕ, bhmtTanOddTail u n) ≤
       4 * u * (1 / (2 * (1 + u ^ 2))) := by
@@ -491,9 +518,7 @@ theorem bhmtK1TwoNearestCore_deriv_nonpos :
   set u : ℝ := 1 - 2 * x
   have hu0 : 0 ≤ u := by dsimp [u]; linarith
   have hu1 : u < 1 := by dsimp [u]; linarith
-  have htan : bhmtTanPartialFractionIdentity u :=
-    bhmtTanPartialFractionIdentity_of_bounds hu0 hu1
-  have hlog := bhmt_log_derivative_expr_nonneg_of_tan_series hu0 hu1 htan
+  have hlog := bhmt_log_derivative_expr_nonneg_of_tan_series hu0 hu1
   have hderiv := deriv_bhmtK1TwoNearestCore_eq_neg_log_factor hx0 hxhalf
   have hfactor_nonneg :
       0 ≤ 8 * (1 + u ^ 2) * Real.cos (Real.pi * u / 2) ^ 2 / (1 - u ^ 2) ^ 2 := by

@@ -38,7 +38,7 @@ def M (m : ℕ) : ℕ := 2 ^ m
 instance m_neZero (m : ℕ) : NeZero (M m) :=
   ⟨(Nat.two_pow_pos m).ne'⟩
 
-/-- The first computational-basis index of the counting register. -/
+/-- The QPE counting-register dimension is never zero. -/
 def zeroIndex (m : ℕ) : Fin (M m) :=
   ⟨0, by unfold M; exact Nat.two_pow_pos m⟩
 
@@ -113,6 +113,43 @@ theorem unitPhaseDistance_le_add_one (theta grid : ℝ) :
     unitPhaseDistance theta grid ≤ |theta - grid + 1| := by
   unfold unitPhaseDistance
   exact le_trans (min_le_right _ _) (min_le_right _ _)
+
+theorem unitPhaseDistance_pos_of_mem_Ico_ne {theta grid : ℝ}
+    (ht0 : 0 ≤ theta) (ht1 : theta < 1)
+    (hg0 : 0 ≤ grid) (hg1 : grid < 1)
+    (hne : theta ≠ grid) :
+    0 < unitPhaseDistance theta grid := by
+  unfold unitPhaseDistance
+  apply lt_min
+  · exact abs_pos.mpr (sub_ne_zero.mpr hne)
+  · apply lt_min
+    · exact abs_pos.mpr (by linarith)
+    · exact abs_pos.mpr (by linarith)
+
+theorem unitPhaseDistance_le_half_of_mem_Ico {theta grid : ℝ}
+    (ht0 : 0 ≤ theta) (ht1 : theta < 1)
+    (hg0 : 0 ≤ grid) (hg1 : grid < 1) :
+    unitPhaseDistance theta grid ≤ (1 : ℝ) / 2 := by
+  by_cases hclose : |theta - grid| ≤ (1 : ℝ) / 2
+  · exact le_trans (unitPhaseDistance_le_abs_sub theta grid) hclose
+  · have hfar : (1 : ℝ) / 2 < |theta - grid| := lt_of_not_ge hclose
+    by_cases hge : grid ≤ theta
+    · have hdist : |theta - grid - 1| ≤ (1 : ℝ) / 2 := by
+        have hnonneg : 0 ≤ theta - grid := by linarith
+        have hle : theta - grid ≤ 1 := by linarith
+        rw [abs_of_nonpos (by linarith : theta - grid - 1 ≤ 0)]
+        linarith [abs_of_nonneg hnonneg ▸ hfar, hle]
+      exact le_trans (unitPhaseDistance_le_sub_one theta grid) hdist
+    · have hle : theta ≤ grid := le_of_lt (lt_of_not_ge hge)
+      have hdist : |theta - grid + 1| ≤ (1 : ℝ) / 2 := by
+        have hnonpos : theta - grid ≤ 0 := by linarith
+        have hge_neg : -1 ≤ theta - grid := by linarith
+        rw [abs_of_nonneg (by linarith : 0 ≤ theta - grid + 1)]
+        have habs : |theta - grid| = grid - theta := by
+          rw [abs_of_nonpos hnonpos]
+          ring
+        linarith [habs ▸ hfar, hge_neg]
+      exact le_trans (unitPhaseDistance_le_add_one theta grid) hdist
 
 theorem unitPhaseDistance_cases {theta grid eps : ℝ}
     (h : unitPhaseDistance theta grid ≤ eps) :
@@ -860,6 +897,97 @@ theorem qpeApproxGeometricProbability_neg (N : ℕ) (delta : ℝ) :
   · have hneg : -delta ≠ 0 := neg_ne_zero.mpr h
     simp [h, hneg, Real.sin_neg]
 
+
+theorem qpeApproxGeometricProbability_abs (N : ℕ) (delta : ℝ) :
+    qpeApproxGeometricProbability N |delta| = qpeApproxGeometricProbability N delta := by
+  by_cases h : 0 ≤ delta
+  · rw [abs_of_nonneg h]
+  · have hlt : delta < 0 := lt_of_not_ge h
+    rw [abs_of_neg hlt]
+    exact qpeApproxGeometricProbability_neg N delta
+
+theorem qpeApproxGeometricProbability_add_one_of_sin_ne_zero
+    (N : ℕ) (delta : ℝ)
+    (hden : Real.sin (Real.pi * delta) ≠ 0) :
+    qpeApproxGeometricProbability N (delta + 1) =
+      qpeApproxGeometricProbability N delta := by
+  unfold qpeApproxGeometricProbability
+  have hdelta : delta ≠ 0 := by
+    intro h
+    apply hden
+    simp [h]
+  have hdelta1 : delta + 1 ≠ 0 := by
+    intro h
+    have hs : Real.sin (Real.pi * delta) = 0 := by
+      have hd : delta = -1 := by linarith
+      simp [hd]
+    exact hden hs
+  simp [hdelta, hdelta1]
+  have hnum : Real.sin (Real.pi * (N : ℝ) * (delta + 1)) ^ 2 =
+      Real.sin (Real.pi * (N : ℝ) * delta) ^ 2 := by
+    have harg : Real.pi * (N : ℝ) * (delta + 1) =
+        Real.pi * (N : ℝ) * delta + N * Real.pi := by
+      ring
+    rw [harg, Real.sin_add_nat_mul_pi]
+    rw [mul_pow]
+    have hsgn : ((-1 : ℝ) ^ N) ^ 2 = 1 := by
+      rw [← pow_mul]
+      norm_num
+    rw [hsgn, one_mul]
+  have hdenom : Real.sin (Real.pi * (delta + 1)) ^ 2 =
+      Real.sin (Real.pi * delta) ^ 2 := by
+    have harg : Real.pi * (delta + 1) = Real.pi * delta + Real.pi := by ring
+    rw [harg, Real.sin_add_pi]
+    ring
+  rw [div_pow, div_pow]
+  rw [hnum, mul_pow, mul_pow, hdenom]
+
+theorem qpeApproxGeometricProbability_sub_one_of_sin_ne_zero
+    (N : ℕ) (delta : ℝ)
+    (hden : Real.sin (Real.pi * delta) ≠ 0) :
+    qpeApproxGeometricProbability N (delta - 1) =
+      qpeApproxGeometricProbability N delta := by
+  have hden_sub : Real.sin (Real.pi * (delta - 1)) ≠ 0 := by
+    intro hs
+    apply hden
+    have harg : Real.pi * (delta - 1) = Real.pi * delta - Real.pi := by ring
+    rw [harg, Real.sin_sub_pi] at hs
+    simpa using hs
+  have h := qpeApproxGeometricProbability_add_one_of_sin_ne_zero N (delta - 1) hden_sub
+  have harg : delta - 1 + 1 = delta := by ring
+  simpa [harg] using h.symm
+
+theorem qpeApproxGeometricProbability_unitPhaseDistance_eq_of_sin_ne_zero
+    (N : ℕ) {theta grid : ℝ}
+    (hden : Real.sin (Real.pi * (theta - grid)) ≠ 0) :
+    qpeApproxGeometricProbability N (unitPhaseDistance theta grid) =
+      qpeApproxGeometricProbability N (theta - grid) := by
+  let delta := theta - grid
+  have h_abs (x : ℝ) :
+      qpeApproxGeometricProbability N |x| = qpeApproxGeometricProbability N x :=
+    qpeApproxGeometricProbability_abs N x
+  have hsub : qpeApproxGeometricProbability N (delta - 1) =
+      qpeApproxGeometricProbability N delta :=
+    qpeApproxGeometricProbability_sub_one_of_sin_ne_zero N delta (by simpa [delta] using hden)
+  have hadd : qpeApproxGeometricProbability N (delta + 1) =
+      qpeApproxGeometricProbability N delta :=
+    qpeApproxGeometricProbability_add_one_of_sin_ne_zero N delta (by simpa [delta] using hden)
+  unfold unitPhaseDistance
+  change qpeApproxGeometricProbability N
+      (min |delta| (min |delta - 1| |delta + 1|)) =
+    qpeApproxGeometricProbability N delta
+  by_cases hleft : |delta| ≤ min |delta - 1| |delta + 1|
+  · rw [min_eq_left hleft]
+    exact h_abs delta
+  · rw [min_eq_right (le_of_not_ge hleft)]
+    by_cases hmid : |delta - 1| ≤ |delta + 1|
+    · rw [min_eq_left hmid]
+      rw [h_abs (delta - 1)]
+      exact hsub
+    · rw [min_eq_right (le_of_not_ge hmid)]
+      rw [h_abs (delta + 1)]
+      exact hadd
+
 /-- Lower bound for a geometric QPE probability at scaled offset `x / N`. -/
 theorem qpeApproxGeometricProbability_lower_bound_scaled
     {N : ℕ} {x : ℝ} (hN : 0 < N) (hx0 : 0 < x) (hx1 : x < 1) :
@@ -1530,6 +1658,53 @@ theorem qpeApproxGeometricProbability_upper_bound_sin_den {N : ℕ} {delta : ℝ
             exact mul_nonneg (inv_nonneg.mpr hden_sq_pos.le)
               (inv_nonneg.mpr (sq_nonneg (N : ℝ)))
           simpa using mul_le_mul_of_nonneg_right hnum_le hright_nonneg
+
+theorem qpeApproxGeometricProbability_upper_bound_unitDistance
+    {N : ℕ} {delta : ℝ}
+    (hN : 0 < N) (hdelta_pos : 0 < delta) (hdelta_half : delta ≤ (1 : ℝ) / 2) :
+    qpeApproxGeometricProbability N delta ≤ 1 / (2 * (N : ℝ) * delta) ^ 2 := by
+  have hNpos : 0 < (N : ℝ) := by exact_mod_cast hN
+  have harg_pos : 0 < Real.pi * delta := by positivity
+  have harg_lt_pi : Real.pi * delta < Real.pi := by
+    nlinarith [Real.pi_pos, hdelta_half]
+  have hsin_pos : 0 < Real.sin (Real.pi * delta) :=
+    Real.sin_pos_of_pos_of_lt_pi harg_pos harg_lt_pi
+  have hden : Real.sin (Real.pi * delta) ≠ 0 := ne_of_gt hsin_pos
+  have hgeom := qpeApproxGeometricProbability_upper_bound_sin_den
+    (N := N) (delta := delta) hN hden
+  have harg_le : |Real.pi * delta| ≤ Real.pi / 2 := by
+    rw [abs_of_pos harg_pos]
+    nlinarith [Real.pi_pos, hdelta_half]
+  have hsin_lower_raw := Real.mul_abs_le_abs_sin (x := Real.pi * delta) harg_le
+  have hsin_lower : 2 * delta ≤ |Real.sin (Real.pi * delta)| := by
+    calc
+      2 * delta = 2 / Real.pi * |Real.pi * delta| := by
+        rw [abs_of_pos harg_pos]
+        field_simp [Real.pi_ne_zero]
+      _ ≤ |Real.sin (Real.pi * delta)| := hsin_lower_raw
+  have hsin_sq_lower : (2 * delta) ^ 2 ≤ Real.sin (Real.pi * delta) ^ 2 := by
+    have hleft_nonneg : 0 ≤ 2 * delta := by positivity
+    have habs_left : |2 * delta| ≤ |Real.sin (Real.pi * delta)| := by
+      simpa [abs_of_nonneg hleft_nonneg] using hsin_lower
+    simpa [sq_abs] using (sq_le_sq.mpr habs_left)
+  have hbound :
+      (Real.sin (Real.pi * delta) ^ 2)⁻¹ * ((N : ℝ) ^ 2)⁻¹ ≤
+        1 / (2 * (N : ℝ) * delta) ^ 2 := by
+    have hmul_lower : (2 * (N : ℝ) * delta) ^ 2 ≤
+        (N : ℝ) ^ 2 * Real.sin (Real.pi * delta) ^ 2 := by
+      calc
+        (2 * (N : ℝ) * delta) ^ 2 = (N : ℝ) ^ 2 * (2 * delta) ^ 2 := by ring
+        _ ≤ (N : ℝ) ^ 2 * Real.sin (Real.pi * delta) ^ 2 := by gcongr
+    have hdenom_pos : 0 < (N : ℝ) ^ 2 * Real.sin (Real.pi * delta) ^ 2 := by positivity
+    have htarget_pos : 0 < (2 * (N : ℝ) * delta) ^ 2 := by positivity
+    have hinv := (inv_le_inv₀ hdenom_pos htarget_pos).mpr hmul_lower
+    have hleft_eq :
+        (Real.sin (Real.pi * delta) ^ 2)⁻¹ * ((N : ℝ) ^ 2)⁻¹ =
+          ((N : ℝ) ^ 2 * Real.sin (Real.pi * delta) ^ 2)⁻¹ := by
+      rw [← mul_inv_rev]
+    rw [hleft_eq]
+    simpa [one_div] using hinv
+  exact le_trans hgeom hbound
 
 theorem qpeApproxGeometricProbability_upper_bound_of_sin_lower
     {N j : ℕ} {delta : ℝ}

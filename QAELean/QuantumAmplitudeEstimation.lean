@@ -139,28 +139,6 @@ theorem paperLemma7 {a theta thetaHat epsilon : ℝ}
     _ = 2 * epsilon * Real.sqrt (amplitudeFromAngle theta * (1 - amplitudeFromAngle theta)) + epsilon ^ 2 := by
           rw [hsqrtd]
 
-/-- Theorem 12's analytic core using the proved Lemma 7. -/
-theorem theorem12_from_phase_estimation_proved
-    {a theta thetaHat : ℝ} {M k : ℕ}
-    (hM : 0 < M)
-    (ha : a = amplitudeFromAngle theta)
-    (hPhase : |thetaHat - theta| ≤ phaseErrorRadius M k) :
-    |amplitudeFromAngle thetaHat - a| ≤ theorem12ErrorBound a M k := by
-  have hEpsNonneg : 0 ≤ phaseErrorRadius M k := by
-    unfold phaseErrorRadius
-    positivity
-  simpa [theorem12ErrorBound] using paperLemma7 hEpsNonneg ha hPhase
-
-/-- QAE post-processing error using the proved Lemma 7. -/
-theorem estAmp_error_from_phase_estimation_proved
-    {a theta : ℝ} {M k y : ℕ}
-    (hM : 0 < M)
-    (ha : a = amplitudeFromAngle theta)
-    (hPhase : |(Real.pi * (y : ℝ) / (M : ℝ)) - theta| ≤ phaseErrorRadius M k) :
-    |estAmpEstimate M y - a| ≤ theorem12ErrorBound a M k := by
-  simpa [estAmpEstimate] using
-    theorem12_from_phase_estimation_proved hM ha hPhase
-
 end QAE
 
 /-!
@@ -184,35 +162,96 @@ probability of measuring counting-register value `x` after applying the inverse
 QFT to `phaseState m theta`.
 
 This statement packages the paper-facing facts: exact-grid phases are measured
-with probability one, off-grid point probabilities have the sine-ratio form, and
-the circular `k / M` window has the BHMT lower bounds for `k > 1` and for
-`k = 1` with `m > 1`. -/
+with probability one, off-grid point probabilities have the sine-ratio form in
+terms of the circular unit distance and satisfy the pointwise inverse-square
+bound, and the circular `k / M` window has the BHMT lower bounds for `k > 1` and
+for `k = 1` when `M > 2`. -/
 theorem PaperTheorem11 :
     (∀ (m : ℕ) {theta : ℝ}, 0 ≤ theta → theta < 1 →
       qpeFractionalOffset m theta = 0 →
         qpeApproxOutcomeProbability m theta (qpeLowerAdjacentOutcome m theta) = 1) ∧
-    (∀ (m : ℕ) (theta : ℝ) (x : Fin (M m)),
-      Real.sin (Real.pi * (theta - (((x : ℕ) : ℝ) / (M m : ℝ)))) ≠ 0 →
+    (∀ (m : ℕ) {theta : ℝ}, 0 ≤ theta → theta < 1 →
+      qpeFractionalOffset m theta ≠ 0 →
+      ∀ (x : Fin (M m)),
+        let delta := unitPhaseDistance theta (((x : ℕ) : ℝ) / (M m : ℝ))
         qpeApproxOutcomeProbability m theta x =
-          qpeApproxGeometricProbability (M m)
-            (theta - (((x : ℕ) : ℝ) / (M m : ℝ)))) ∧
+            (Real.sin (Real.pi * (M m : ℝ) * delta) /
+              ((M m : ℝ) * Real.sin (Real.pi * delta))) ^ 2 ∧
+          qpeApproxOutcomeProbability m theta x ≤
+            1 / (2 * (M m : ℝ) * delta) ^ 2) ∧
     (∀ (m k : ℕ) {theta : ℝ}, 0 ≤ theta → theta ≤ 1 → 1 < k →
       1 - 1 / (2 * ((k : ℝ) - 1)) ≤ qpeCircularPhaseWindowProbability m k theta) ∧
-    (∀ (m : ℕ) {theta : ℝ}, 1 < m → 0 ≤ theta → theta ≤ 1 →
+    (∀ (m : ℕ) {theta : ℝ}, 2 < M m → 0 ≤ theta → theta ≤ 1 →
       8 / Real.pi ^ 2 ≤ qpeCircularPhaseWindowProbability m 1 theta) := by
   constructor
   · intro m theta h0 h1 hx
     exact qpeApproxOutcomeProbability_lowerAdjacent_eq_one_of_fractionalOffset_eq_zero
       m h0 h1 hx
   constructor
-  · intro m theta x hden
-    exact qpeApproxOutcomeProbability_eq_geometric_of_sin_ne_zero m theta x hden
+  · intro m theta h0 h1 hfrac x
+    dsimp
+    let grid : ℝ := ((x : ℕ) : ℝ) / (M m : ℝ)
+    have hMpos : 0 < (M m : ℝ) := by exact_mod_cast (Nat.two_pow_pos m)
+    have hgrid0 : 0 ≤ grid := by
+      dsimp [grid]
+      positivity
+    have hgrid1 : grid < 1 := by
+      have hxlt : ((x : ℕ) : ℝ) < (M m : ℝ) := by exact_mod_cast x.isLt
+      dsimp [grid]
+      rwa [div_lt_one hMpos]
+    have htheta_ne_grid : theta ≠ grid := by
+      intro htheta
+      apply hfrac
+      unfold qpeFractionalOffset
+      rw [htheta]
+      have hmul : (M m : ℝ) * grid = ((x : ℕ) : ℝ) := by
+        dsimp [grid]
+        field_simp [hMpos.ne']
+      rw [hmul]
+      norm_num [Int.fract]
+    have hden : Real.sin (Real.pi * (theta - grid)) ≠ 0 := by
+      have hraw_ne : theta - grid ≠ 0 := sub_ne_zero.mpr htheta_ne_grid
+      have hraw_abs_lt_one : |theta - grid| < 1 := by
+        apply abs_lt.mpr
+        constructor <;> linarith
+      have harg_abs_lt_pi : |Real.pi * (theta - grid)| < Real.pi := by
+        rw [abs_mul, abs_of_pos Real.pi_pos]
+        have hmul := mul_lt_mul_of_pos_left hraw_abs_lt_one Real.pi_pos
+        simpa [mul_comm] using hmul
+      have harg_ne_zero : Real.pi * (theta - grid) ≠ 0 :=
+        mul_ne_zero Real.pi_ne_zero hraw_ne
+      have hzero := (Real.sin_eq_zero_iff_of_lt_of_lt (x := Real.pi * (theta - grid))
+        (by exact (abs_lt.mp harg_abs_lt_pi).1)
+        (by exact (abs_lt.mp harg_abs_lt_pi).2)).mp
+      intro hs
+      exact harg_ne_zero (hzero hs)
+    have heq_raw := qpeApproxOutcomeProbability_eq_geometric_of_sin_ne_zero
+      m theta x (by simpa [grid] using hden)
+    have heq_unit : qpeApproxOutcomeProbability m theta x =
+        qpeApproxGeometricProbability (M m) (unitPhaseDistance theta grid) := by
+      rw [heq_raw]
+      exact (qpeApproxGeometricProbability_unitPhaseDistance_eq_of_sin_ne_zero
+        (N := M m) (theta := theta) (grid := grid) hden).symm
+    have hdelta_pos : 0 < unitPhaseDistance theta grid :=
+      unitPhaseDistance_pos_of_mem_Ico_ne h0 h1 hgrid0 hgrid1 htheta_ne_grid
+    have hdelta_half : unitPhaseDistance theta grid ≤ (1 : ℝ) / 2 :=
+      unitPhaseDistance_le_half_of_mem_Ico h0 h1 hgrid0 hgrid1
+    have hub := qpeApproxGeometricProbability_upper_bound_unitDistance
+      (N := M m) (delta := unitPhaseDistance theta grid)
+      (Nat.two_pow_pos m) hdelta_pos hdelta_half
+    constructor
+    · rw [heq_unit]
+      unfold qpeApproxGeometricProbability
+      have hdelta_ne : unitPhaseDistance theta grid ≠ 0 := ne_of_gt hdelta_pos
+      simp [hdelta_ne, grid]
+    · rw [heq_unit]
+      simpa [grid] using hub
   constructor
   · intro m k theta h0 h1 hk
     have h := qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k h0 h1 hk
     have hk_ne : k ≠ 1 := by omega
     simpa [bhmt11SuccessProbability, hk_ne] using h
-  · intro m theta _hm h0 h1
+  · intro m theta _hM h0 h1
     exact qpeCircularPhaseWindowProbability_lower_bound_k1 m h0 h1
 
 end QPE
@@ -1307,18 +1346,25 @@ theorem estAmp_error_of_phase_circular_window
     (hclose : QPE.qpeCircularPhaseWindow m k (alpha / Real.pi) y) :
     |estAmpEstimate (QPE.M m) (y : ℕ) - amplitudeFromAngle alpha| ≤
       theorem12ErrorBound (amplitudeFromAngle alpha) (QPE.M m) k := by
+  have hEpsNonneg : 0 ≤ phaseErrorRadius (QPE.M m) k := by
+    unfold phaseErrorRadius
+    positivity
   unfold QPE.qpeCircularPhaseWindow at hclose
   rcases QPE.unitPhaseDistance_cases hclose with hlin | hminus | hplus
-  · exact estAmp_error_from_phase_estimation_proved (Nat.two_pow_pos m) rfl
-      (phase_angle_error_of_pos_window m k y hlin)
-  · have h := estAmp_error_from_phase_estimation_proved (M := QPE.M m) (k := k)
-      (a := amplitudeFromAngle (alpha - Real.pi)) (theta := alpha - Real.pi) (y := (y : ℕ))
-      (Nat.two_pow_pos m) rfl (phase_angle_error_of_window_sub_one m k y hminus)
-    simpa [amplitudeFromAngle_sub_pi alpha] using h
-  · have h := estAmp_error_from_phase_estimation_proved (M := QPE.M m) (k := k)
-      (a := amplitudeFromAngle (alpha + Real.pi)) (theta := alpha + Real.pi) (y := (y : ℕ))
-      (Nat.two_pow_pos m) rfl (phase_angle_error_of_window_add_one m k y hplus)
-    simpa [amplitudeFromAngle_add_pi alpha] using h
+  · simpa [estAmpEstimate, theorem12ErrorBound] using
+      paperLemma7 (a := amplitudeFromAngle alpha) (theta := alpha)
+        (thetaHat := Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ))
+        hEpsNonneg rfl (phase_angle_error_of_pos_window m k y hlin)
+  · have h := paperLemma7 (a := amplitudeFromAngle (alpha - Real.pi))
+      (theta := alpha - Real.pi)
+      (thetaHat := Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ))
+      hEpsNonneg rfl (phase_angle_error_of_window_sub_one m k y hminus)
+    simpa [estAmpEstimate, theorem12ErrorBound, amplitudeFromAngle_sub_pi alpha] using h
+  · have h := paperLemma7 (a := amplitudeFromAngle (alpha + Real.pi))
+      (theta := alpha + Real.pi)
+      (thetaHat := Real.pi * ((y : ℕ) : ℝ) / (QPE.M m : ℝ))
+      hEpsNonneg rfl (phase_angle_error_of_window_add_one m k y hplus)
+    simpa [estAmpEstimate, theorem12ErrorBound, amplitudeFromAngle_add_pi alpha] using h
 
 theorem qaeGroverPlane_estimate_error_of_wrapped_neg_circular_window
     (m k : ℕ) {theta : ℝ} (y : Fin (QPE.M m))

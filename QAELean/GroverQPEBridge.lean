@@ -1,4 +1,4 @@
-import QAELean.UtilGates
+import QAELean.RotationGates
 import QAELean.QuantumPhaseEstimation
 
 /-!
