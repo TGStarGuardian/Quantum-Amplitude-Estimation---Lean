@@ -665,7 +665,7 @@ theorem qpeCircularFailureProbability_le_of_bucket_tail
       i ∈ Finset.Ioc (k - 1) n →
         ((qpeCircularPhaseWindowFailureOutcomes m k theta).filter
           (fun y => bucket y = i)).card ≤ 2) :
-    qpeCircularPhaseWindowFailureProbability m k theta ≤
+    qpeCircularPhaseWindowFailureProbability m k theta <
       1 / (2 * ((k : ℝ) - 1)) := by
   classical
   let F := qpeCircularPhaseWindowFailureOutcomes m k theta
@@ -720,14 +720,14 @@ theorem qpeCircularFailureProbability_le_of_bucket_tail
     intro i hi
     exact hfiber_sum i hi
   unfold qpeCircularPhaseWindowFailureProbability
-  change (∑ y ∈ F, p y) ≤ 1 / (2 * ((k : ℝ) - 1))
+  change (∑ y ∈ F, p y) < 1 / (2 * ((k : ℝ) - 1))
   rw [← hpartition]
   have htail_bound :
-      (∑ i ∈ Finset.Ioc (k - 1) n, (1 / (2 * (i : ℝ) ^ 2) : ℝ)) ≤
+      (∑ i ∈ Finset.Ioc (k - 1) n, (1 / (2 * (i : ℝ) ^ 2) : ℝ)) <
         1 / (2 * ((k : ℝ) - 1)) := by
     have hkpred_ne : k - 1 ≠ 0 := by omega
     have hsum_inv :
-        (∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹)) ≤
+        (∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹)) <
           (((k - 1 : ℕ) : ℝ))⁻¹ := by
       calc
         (∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹))
@@ -740,9 +740,9 @@ theorem qpeCircularFailureProbability_le_of_bucket_tail
                 positivity
         _ ≤ (((k - 1 : ℕ) : ℝ))⁻¹ - (((max (k - 1) n : ℕ) : ℝ))⁻¹ :=
               sum_Ioc_inv_sq_le_sub (α := ℝ) hkpred_ne (le_max_left _ _)
-        _ ≤ (((k - 1 : ℕ) : ℝ))⁻¹ := by
-              exact sub_le_self _ (by positivity)
-    have hmul := mul_le_mul_of_nonneg_left hsum_inv (by norm_num : (0 : ℝ) ≤ 1 / 2)
+        _ < (((k - 1 : ℕ) : ℝ))⁻¹ := by
+              exact sub_lt_self _ (by positivity)
+    have hmul := mul_lt_mul_of_pos_left hsum_inv (by norm_num : (0 : ℝ) < 1 / 2)
     calc
       (∑ i ∈ Finset.Ioc (k - 1) n, (1 / (2 * (i : ℝ) ^ 2) : ℝ))
           = (1 / 2 : ℝ) * ∑ i ∈ Finset.Ioc (k - 1) n, (((i : ℝ) ^ 2)⁻¹) := by
@@ -750,14 +750,14 @@ theorem qpeCircularFailureProbability_le_of_bucket_tail
             apply Finset.sum_congr rfl
             intro i _hi
             ring_nf
-      _ ≤ (1 / 2 : ℝ) * (((k - 1 : ℕ) : ℝ))⁻¹ := hmul
+      _ < (1 / 2 : ℝ) * (((k - 1 : ℕ) : ℝ))⁻¹ := hmul
       _ = 1 / (2 * ((k : ℝ) - 1)) := by
             have hk1 : ((k - 1 : ℕ) : ℝ) = (k : ℝ) - 1 := by
               rw [Nat.cast_sub hk.le]
               norm_num
             rw [hk1]
             field_simp [show (2 : ℝ) ≠ 0 by norm_num]
-  exact le_trans hsum_tail htail_bound
+  exact lt_of_le_of_lt hsum_tail htail_bound
 
 /-- The real two-nearest-outcome core inequality for the BHMT11 `k = 1` constant.
 For `x` the fractional part of `M * theta`, this is the normalized sum of the two
@@ -2006,7 +2006,7 @@ theorem qpeCircularDistanceBucket_filter_card_le_two
 /-- BHMT11 `k > 1` failure bound with the distance-bucket cardinality fact proved. -/
 theorem qpeCircularFailureProbability_le_k_gt_one
     (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1) (hk : 1 < k) :
-    qpeCircularPhaseWindowFailureProbability m k theta ≤
+    qpeCircularPhaseWindowFailureProbability m k theta <
       1 / (2 * ((k : ℝ) - 1)) := by
   apply qpeCircularFailureProbability_le_of_bucket_tail
     (m := m) (k := k) (n := M m) (theta := theta) hk
@@ -2023,7 +2023,7 @@ theorem qpeCircularFailureProbability_le_k_gt_one
 hypothesis. -/
 theorem qpeCircularPhaseWindowProbability_lower_bound_k_gt_one
     (m k : ℕ) {theta : ℝ} (h0 : 0 ≤ theta) (h1 : theta ≤ 1) (hk : 1 < k) :
-    bhmt11SuccessProbability k ≤ qpeCircularPhaseWindowProbability m k theta := by
+    bhmt11SuccessProbability k < qpeCircularPhaseWindowProbability m k theta := by
   have hfail := qpeCircularFailureProbability_le_k_gt_one m k h0 h1 hk
   have htotal :
       qpeCircularPhaseWindowProbability m k theta +

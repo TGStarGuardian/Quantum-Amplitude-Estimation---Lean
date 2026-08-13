@@ -663,7 +663,7 @@ theorem bhmt11CircularWindowBound_proved : BHMT11CircularWindowBound := by
   · subst k
     exact qpeCircularPhaseWindowProbability_lower_bound_k1 m h0 h1
   · have hkgt : 1 < k := by omega
-    exact qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k h0 h1 hkgt
+    exact (qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k h0 h1 hkgt).le
 
 end QPE
 end QAE

@@ -250,7 +250,9 @@ theorem PaperTheorem11 :
   · intro m k theta h0 h1 hk
     have h := qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k h0 h1 hk
     have hk_ne : k ≠ 1 := by omega
-    simpa [bhmt11SuccessProbability, hk_ne] using h
+    have h' : bhmt11SuccessProbability k < qpeCircularPhaseWindowProbability m k theta := by
+      simpa [bhmt11SuccessProbability, hk_ne] using h
+    exact h'.le
   · intro m theta _hM h0 h1
     exact qpeCircularPhaseWindowProbability_lower_bound_k1 m h0 h1
 
@@ -1440,6 +1442,56 @@ theorem qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_circular_windows
         (mul_le_mul_of_nonneg_left hneg' (by norm_num))
     _ = qaeGroverPlaneSuccessProbabilityK m k theta := by rw [hsuccess_eq]
 
+
+theorem qaeGroverPlaneSuccessProbabilityK_lt_of_qpe_circular_windows
+    (m k : ℕ) (theta : ℝ)
+    (hpos : theorem12SuccessProbability k <
+      QPE.qpeCircularPhaseWindowProbability m k (theta / Real.pi))
+    (hneg : theorem12SuccessProbability k <
+      QPE.qpeCircularPhaseWindowProbability m k (1 - theta / Real.pi)) :
+    theorem12SuccessProbability k < qaeGroverPlaneSuccessProbabilityK m k theta := by
+  classical
+  let S := qaeGroverPlaneSuccessfulOutcomesK m k theta
+  let Ppos := fun y : Fin (QPE.M m) => QPE.qpeApproxOutcomeProbability m (theta / Real.pi) y
+  let Pneg := fun y : Fin (QPE.M m) => QPE.qpeApproxOutcomeProbability m (1 - theta / Real.pi) y
+  have hsuccess_eq : qaeGroverPlaneSuccessProbabilityK m k theta =
+      (1 / 2 : ℝ) * (S.sum fun y => Ppos y) + (1 / 2 : ℝ) * (S.sum fun y => Pneg y) := by
+    unfold qaeGroverPlaneSuccessProbabilityK
+    dsimp [S, Ppos, Pneg]
+    simp_rw [qaeGroverPlaneMarginal_eq_wrapped]
+    rw [Finset.sum_add_distrib]
+    rw [Finset.mul_sum, Finset.mul_sum]
+  have hpos_subset : QPE.qpeCircularPhaseWindowOutcomes m k (theta / Real.pi) ⊆ S :=
+    qaeGroverPlane_pos_circular_window_subset_success m k theta
+  have hneg_subset : QPE.qpeCircularPhaseWindowOutcomes m k (1 - theta / Real.pi) ⊆ S :=
+    qaeGroverPlane_wrapped_neg_circular_window_subset_success m k theta
+  have hpos_sum_le : QPE.qpeCircularPhaseWindowProbability m k (theta / Real.pi) ≤
+      S.sum fun y => Ppos y := by
+    unfold QPE.qpeCircularPhaseWindowProbability
+    dsimp [Ppos]
+    exact Finset.sum_le_sum_of_subset_of_nonneg hpos_subset
+      (by intro y _hyS _hynot; exact QPE.qpeApproxOutcomeProbability_nonneg m (theta / Real.pi) y)
+  have hneg_sum_le : QPE.qpeCircularPhaseWindowProbability m k (1 - theta / Real.pi) ≤
+      S.sum fun y => Pneg y := by
+    unfold QPE.qpeCircularPhaseWindowProbability
+    dsimp [Pneg]
+    exact Finset.sum_le_sum_of_subset_of_nonneg hneg_subset
+      (by intro y _hyS _hynot; exact QPE.qpeApproxOutcomeProbability_nonneg m (1 - theta / Real.pi) y)
+  have hpos' : theorem12SuccessProbability k < S.sum fun y => Ppos y :=
+    lt_of_lt_of_le hpos hpos_sum_le
+  have hneg' : theorem12SuccessProbability k < S.sum fun y => Pneg y :=
+    lt_of_lt_of_le hneg hneg_sum_le
+  calc
+    theorem12SuccessProbability k =
+        (1 / 2 : ℝ) * theorem12SuccessProbability k +
+          (1 / 2 : ℝ) * theorem12SuccessProbability k := by ring
+    _ < (1 / 2 : ℝ) * (S.sum fun y => Ppos y) +
+          (1 / 2 : ℝ) * (S.sum fun y => Pneg y) := by
+      exact add_lt_add
+        (mul_lt_mul_of_pos_left hpos' (by norm_num))
+        (mul_lt_mul_of_pos_left hneg' (by norm_num))
+    _ = qaeGroverPlaneSuccessProbabilityK m k theta := by rw [hsuccess_eq]
+
 /-- QAE success probability on the canonical Grover plane, using the proved BHMT11
 circular-window bound. -/
 theorem qaeGroverPlaneSuccessProbabilityK_lower_bound
@@ -1465,6 +1517,59 @@ theorem qaeGroverPlaneSuccessProbabilityK_lower_bound
 
 
 /-- The Theorem 12 error bound in the expanded form used in the BHMT paper. -/
+theorem paperQAESuccessProbabilityK_lt
+    {m n k : ℕ} {A : Square (QPE.M n)} {f : Fin (QPE.M n) → Bool}
+    {ψ0 ψ1 : Vector (QPE.M n)} {theta : ℝ}
+    (hA : Matrix.isUnitary A)
+    (hinit : A ⬝ Vector.basis (QPE.zeroIndex n) =
+      (Real.cos theta : ℂ) • ψ0 + (Real.sin theta : ℂ) • ψ1)
+    (hbad : ∀ x, f x = true → ψ0 x 0 = 0)
+    (hgood : ∀ x, f x = false → ψ1 x 0 = 0)
+    (hψ0 : Vector.IsNormalized ψ0) (hψ1 : Vector.IsNormalized ψ1)
+    (htheta0 : 0 ≤ theta) (htheta_pi : theta ≤ Real.pi) (hk : 1 < k) :
+    theorem12SuccessProbability k <
+      (qaeGroverPlaneSuccessfulOutcomesK m k theta).sum
+        (fun y => paperQAEOutputProbability m n A f y) := by
+  have hplane := qaeGroverPlaneSuccessProbabilityK_lt
+    (m := m) (k := k) (theta := theta) htheta0 htheta_pi hk
+  have hpoint : ∀ y : Fin (QPE.M m),
+      paperQAEOutputProbability m n A f y = qaeGroverPlaneMarginal m theta y := by
+    intro y
+    rw [paperQAEOutputProbability_eq_good_bad_mixture hA hinit hbad hgood
+      hψ0 hψ1 y]
+    rw [qaeGroverPlaneMarginal_eq_wrapped]
+  calc
+    theorem12SuccessProbability k ≤ qaeGroverPlaneSuccessProbabilityK m k theta := hplane
+    _ = (qaeGroverPlaneSuccessfulOutcomesK m k theta).sum
+          (fun y => paperQAEOutputProbability m n A f y) := by
+        unfold qaeGroverPlaneSuccessProbabilityK
+        apply Finset.sum_congr rfl
+        intro y _hy
+        exact (hpoint y).symm
+
+theorem paperQAESuccessProbabilityK_lt_expanded
+    {m n k : ℕ} {A : Square (QPE.M n)} {f : Fin (QPE.M n) → Bool}
+    {ψ0 ψ1 : Vector (QPE.M n)} {theta : ℝ}
+    (hA : Matrix.isUnitary A)
+    (hinit : A ⬝ Vector.basis (QPE.zeroIndex n) =
+      (Real.cos theta : ℂ) • ψ0 + (Real.sin theta : ℂ) • ψ1)
+    (hbad : ∀ x, f x = true → ψ0 x 0 = 0)
+    (hgood : ∀ x, f x = false → ψ1 x 0 = 0)
+    (hψ0 : Vector.IsNormalized ψ0) (hψ1 : Vector.IsNormalized ψ1)
+    (htheta0 : 0 ≤ theta) (htheta_pi : theta ≤ Real.pi) (hk : 1 < k) :
+    theorem12SuccessProbability k <
+      (Finset.univ.filter (fun y : Fin (QPE.M m) =>
+        |paperQAEEstimate m y - amplitudeFromAngle theta| ≤
+          2 * Real.pi * (k : ℝ) * Real.sqrt (amplitudeFromAngle theta *
+            (1 - amplitudeFromAngle theta)) / (QPE.M m : ℝ) +
+            (k : ℝ) ^ 2 * Real.pi ^ 2 / (QPE.M m : ℝ) ^ 2)).sum
+        (fun y => paperQAEOutputProbability m n A f y) := by
+  have h := paperQAESuccessProbabilityK_lt
+    (m := m) (n := n) (k := k) (A := A) (f := f)
+    (ψ0 := ψ0) (ψ1 := ψ1) (theta := theta)
+    hA hinit hbad hgood hψ0 hψ1 htheta0 htheta_pi hk
+  simpa [qaeGroverPlaneSuccessfulOutcomesK, paperQAEEstimate, theorem12ErrorBound_eq_expanded_QPE]
+    using h
 theorem theorem12ErrorBound_eq_expanded_QPE (m k : ℕ) (a : ℝ) :
     theorem12ErrorBound a (QPE.M m) k =
       2 * Real.pi * (k : ℝ) * Real.sqrt (a * (1 - a)) / (QPE.M m : ℝ) +
@@ -1753,6 +1858,16 @@ The probability distribution is the counting-register marginal
 `paperQAEOutputProbability m n A f`, and the classical output is
 `paperQAEEstimate m y = sin²(π y / M)`.  The amplitude `a` is the probability
 mass of the prepared state `A|0...0⟩` on the marked basis states. -/
+private theorem theorem12SuccessProbability_lt_one {k : ℕ} (hk : 1 < k) :
+    theorem12SuccessProbability k < 1 := by
+  unfold theorem12SuccessProbability
+  have hkne : k ≠ 1 := by omega
+  have hden : 0 < 2 * ((k : ℝ) - 1) := by
+    have : (1 : ℝ) < (k : ℝ) := by exact_mod_cast hk
+    linarith
+  simp [hkne]
+  positivity
+
 theorem PaperTheorem12
     {m n k : ℕ} (A : Square (QPE.M n)) (f : Fin (QPE.M n) → Bool)
     (theta a : ℝ)
@@ -1768,7 +1883,7 @@ theorem PaperTheorem12
               (k : ℝ) ^ 2 * Real.pi ^ 2 / (QPE.M m : ℝ) ^ 2)).sum
           (fun y => paperQAEOutputProbability m n A f y)) ∧
     (1 < k →
-      1 - 1 / (2 * ((k : ℝ) - 1)) ≤
+      1 - 1 / (2 * ((k : ℝ) - 1)) <
         (Finset.univ.filter (fun y : Fin (QPE.M m) =>
           |paperQAEEstimate m y - a| ≤
             2 * Real.pi * (k : ℝ) * Real.sqrt (a * (1 - a)) / (QPE.M m : ℝ) +
@@ -1861,13 +1976,90 @@ theorem PaperTheorem12
           (m := m) (n := n) (k := k) (A := A) (f := f)
           (ψ0 := paperBadState n A f theta) (ψ1 := paperGoodState n A f theta)
           (theta := theta) hA hinit hbad hgood hψ0 hψ1 htheta0 htheta_pi hk
+  have hStrict : theorem12SuccessProbability k <
+      (Finset.univ.filter (fun y : Fin (QPE.M m) =>
+        |paperQAEEstimate m y - amplitudeFromAngle theta| ≤
+          2 * Real.pi * (k : ℝ) * Real.sqrt (amplitudeFromAngle theta *
+            (1 - amplitudeFromAngle theta)) / (QPE.M m : ℝ) +
+            (k : ℝ) ^ 2 * Real.pi ^ 2 / (QPE.M m : ℝ) ^ 2)).sum
+        (fun y => paperQAEOutputProbability m n A f y) := by
+    by_cases ha0 : amplitudeFromAngle theta = 0
+    · have hzero : paperGoodProbability n A f = 0 := by rw [hgoodProb, ha0]
+      rcases paperQAEEndpointZero_of_goodProbability_zero
+        (m := m) (n := n) (A := A) (f := f) hA hzero with ⟨y, hprob, hest⟩
+      have hsum : 1 ≤
+          (Finset.univ.filter (fun y : Fin (QPE.M m) =>
+            |paperQAEEstimate m y - amplitudeFromAngle theta| ≤
+              2 * Real.pi * (k : ℝ) * Real.sqrt (amplitudeFromAngle theta *
+                (1 - amplitudeFromAngle theta)) / (QPE.M m : ℝ) +
+                (k : ℝ) ^ 2 * Real.pi ^ 2 / (QPE.M m : ℝ) ^ 2)).sum
+            (fun y => paperQAEOutputProbability m n A f y) := by
+        apply paperQAESuccessSum_ge_one_of_point (m := m) (n := n) (k := k)
+          (A := A) (f := f) (a := amplitudeFromAngle theta) (y := y) hprob
+        rw [hest, ha0]
+        norm_num
+        positivity
+      exact lt_of_lt_of_le (theorem12SuccessProbability_lt_one (by omega)) hsum
+    · by_cases ha1 : amplitudeFromAngle theta = 1
+      · have hbadZero : paperBadProbability n A f = 0 := by rw [hbadProb, ha1]; ring
+        rcases paperQAEEndpointOne_of_badProbability_zero
+          (m := m) (n := n) (A := A) (f := f) hA hm hbadZero with ⟨y, hprob, hest⟩
+        have hsum : 1 ≤
+            (Finset.univ.filter (fun y : Fin (QPE.M m) =>
+              |paperQAEEstimate m y - amplitudeFromAngle theta| ≤
+                2 * Real.pi * (k : ℝ) * Real.sqrt (amplitudeFromAngle theta *
+                  (1 - amplitudeFromAngle theta)) / (QPE.M m : ℝ) +
+                  (k : ℝ) ^ 2 * Real.pi ^ 2 / (QPE.M m : ℝ) ^ 2)).sum
+              (fun y => paperQAEOutputProbability m n A f y) := by
+          apply paperQAESuccessSum_ge_one_of_point (m := m) (n := n) (k := k)
+            (A := A) (f := f) (a := amplitudeFromAngle theta) (y := y) hprob
+          rw [hest, ha1]
+          norm_num
+          positivity
+        exact lt_of_lt_of_le (theorem12SuccessProbability_lt_one (by omega)) hsum
+      · have hsin_ne : Real.sin theta ≠ 0 := by
+          intro hsin
+          apply ha0
+          unfold amplitudeFromAngle
+          rw [hsin]
+          norm_num
+        have hcos_ne : Real.cos theta ≠ 0 := by
+          intro hcos
+          apply ha1
+          unfold amplitudeFromAngle
+          nlinarith [Real.sin_sq_add_cos_sq theta]
+        have hcosC : (Real.cos theta : ℂ) ≠ 0 := by exact_mod_cast hcos_ne
+        have hsinC : (Real.sin theta : ℂ) ≠ 0 := by exact_mod_cast hsin_ne
+        have hinit : A ⬝ Vector.basis (QPE.zeroIndex n) =
+            (Real.cos theta : ℂ) • paperBadState n A f theta +
+              (Real.sin theta : ℂ) • paperGoodState n A f theta := by
+          have h := paperPreparedState_decompose_bad_good_states
+            (n := n) (A := A) (f := f) (theta := theta) hcosC hsinC
+          unfold paperPreparedState at h
+          exact h
+        have hbad : ∀ x, f x = true → paperBadState n A f theta x 0 = 0 := by
+          intro x hx
+          exact paperBadState_support (n := n) (A := A) (f := f) (theta := theta) hx
+        have hgood : ∀ x, f x = false → paperGoodState n A f theta x 0 = 0 := by
+          intro x hx
+          exact paperGoodState_support (n := n) (A := A) (f := f) (theta := theta) hx
+        have hψ0 : Vector.IsNormalized (paperBadState n A f theta) :=
+          paperBadState_isNormalized (n := n) (A := A) (f := f) (theta := theta)
+            hbadProb hcos_ne
+        have hψ1 : Vector.IsNormalized (paperGoodState n A f theta) :=
+          paperGoodState_isNormalized (n := n) (A := A) (f := f) (theta := theta)
+            hgoodProb hsin_ne
+        exact paperQAESuccessProbabilityK_lt_expanded
+          (m := m) (n := n) (k := k) (A := A) (f := f)
+          (ψ0 := paperBadState n A f theta) (ψ1 := paperGoodState n A f theta)
+          (theta := theta) hA hinit hbad hgood hψ0 hψ1 htheta0 htheta_pi hk
   constructor
   · intro hk1
     simpa [theorem12SuccessProbability, hk1] using hSuccess
   constructor
   · intro hkgt
     have hk_ne : k ≠ 1 := by omega
-    simpa [theorem12SuccessProbability, hk_ne] using hSuccess
+    simpa [theorem12SuccessProbability, hk_ne] using hStrict
   constructor
   · intro ha0
     have hzero : paperGoodProbability n A f = 0 := by rw [hgoodProb, ha0]
