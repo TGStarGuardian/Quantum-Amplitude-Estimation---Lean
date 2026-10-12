@@ -4,6 +4,18 @@ This repository contains a Lean formalization project focused on the Quantum Amp
 
 The main goal of the project was to define the Quantum Amplitude Estimation algorithm and prove its correctness, following the structure of Theorem 11 and Theorem 12 in the original paper. In the paper, Theorem 11 gives the probability bounds for the phase-estimation distribution, while Theorem 12 uses those bounds to prove the correctness guarantee for amplitude estimation.
 
+## Build
+
+With Lean installed through elan, run from the repository root:
+
+```sh
+lake build
+```
+
+The Lean version is pinned in `lean-toolchain`, and dependency revisions are pinned
+in `lake-manifest.json`. The default target checks the QAE development, including
+its unitarity and state-normalization proofs.
+
 ## AI assistance disclosure
 
 OpenAI Codex was used to write Lean code according to my instructions.

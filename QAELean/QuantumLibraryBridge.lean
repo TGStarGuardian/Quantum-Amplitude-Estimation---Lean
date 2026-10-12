@@ -3,7 +3,7 @@ import QuantumComputing
 /-!
 # Bridge to `duckki/quantum-computing-lean`
 
-This file connects the QAE/IQAE theorem-level development to the existing
+This file connects the QAE theorem-level development to the existing
 `QuantumComputing` Lean library.  We use the library's finite-dimensional complex
 state vectors, pure-state wrapper, unitarity API, and computational-basis
 measurement probabilities.

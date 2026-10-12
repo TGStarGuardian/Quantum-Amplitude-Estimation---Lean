@@ -250,9 +250,7 @@ theorem PaperTheorem11 :
   · intro m k theta h0 h1 hk
     have h := qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k h0 h1 hk
     have hk_ne : k ≠ 1 := by omega
-    have h' : bhmt11SuccessProbability k < qpeCircularPhaseWindowProbability m k theta := by
-      simpa [bhmt11SuccessProbability, hk_ne] using h
-    exact h'.le
+    simpa [bhmt11SuccessProbability, hk_ne] using h.le
   · intro m theta _hM h0 h1
     exact qpeCircularPhaseWindowProbability_lower_bound_k1 m h0 h1
 
@@ -1516,7 +1514,32 @@ theorem qaeGroverPlaneSuccessProbabilityK_lower_bound
   exact qaeGroverPlaneSuccessProbabilityK_lower_bound_of_qpe_circular_windows m k theta hposQ' hnegQ'
 
 
+/-- The strict BHMT11 bound gives a strict QAE success bound for `k > 1`. -/
+theorem qaeGroverPlaneSuccessProbabilityK_lt
+    (m k : ℕ) {theta : ℝ}
+    (htheta0 : 0 ≤ theta) (htheta_pi : theta ≤ Real.pi) (hk : 1 < k) :
+    theorem12SuccessProbability k < qaeGroverPlaneSuccessProbabilityK m k theta := by
+  have hphase0 : 0 ≤ theta / Real.pi := div_nonneg htheta0 (le_of_lt Real.pi_pos)
+  have hphase1 : theta / Real.pi ≤ 1 := (div_le_one Real.pi_pos).mpr htheta_pi
+  have hwrap0 : 0 ≤ 1 - theta / Real.pi := by linarith
+  have hwrap1 : 1 - theta / Real.pi ≤ 1 := by linarith
+  apply qaeGroverPlaneSuccessProbabilityK_lt_of_qpe_circular_windows
+  · simpa [QPE.bhmt11SuccessProbability, theorem12SuccessProbability] using
+      QPE.qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k hphase0 hphase1 hk
+  · simpa [QPE.bhmt11SuccessProbability, theorem12SuccessProbability] using
+      QPE.qpeCircularPhaseWindowProbability_lower_bound_k_gt_one m k hwrap0 hwrap1 hk
+
 /-- The Theorem 12 error bound in the expanded form used in the BHMT paper. -/
+theorem theorem12ErrorBound_eq_expanded_QPE (m k : ℕ) (a : ℝ) :
+    theorem12ErrorBound a (QPE.M m) k =
+      2 * Real.pi * (k : ℝ) * Real.sqrt (a * (1 - a)) / (QPE.M m : ℝ) +
+        (k : ℝ) ^ 2 * Real.pi ^ 2 / (QPE.M m : ℝ) ^ 2 := by
+  unfold theorem12ErrorBound phaseErrorRadius
+  have hMnat : QPE.M m ≠ 0 := ne_of_gt (Nat.two_pow_pos m)
+  have hM : ((QPE.M m : ℕ) : ℝ) ≠ 0 := by exact_mod_cast hMnat
+  field_simp [hM]
+
+/-- The paper QAE circuit satisfies the strict success bound for `k > 1`. -/
 theorem paperQAESuccessProbabilityK_lt
     {m n k : ℕ} {A : Square (QPE.M n)} {f : Fin (QPE.M n) → Bool}
     {ψ0 ψ1 : Vector (QPE.M n)} {theta : ℝ}
@@ -1539,7 +1562,7 @@ theorem paperQAESuccessProbabilityK_lt
       hψ0 hψ1 y]
     rw [qaeGroverPlaneMarginal_eq_wrapped]
   calc
-    theorem12SuccessProbability k ≤ qaeGroverPlaneSuccessProbabilityK m k theta := hplane
+    theorem12SuccessProbability k < qaeGroverPlaneSuccessProbabilityK m k theta := hplane
     _ = (qaeGroverPlaneSuccessfulOutcomesK m k theta).sum
           (fun y => paperQAEOutputProbability m n A f y) := by
         unfold qaeGroverPlaneSuccessProbabilityK
@@ -1570,14 +1593,6 @@ theorem paperQAESuccessProbabilityK_lt_expanded
     hA hinit hbad hgood hψ0 hψ1 htheta0 htheta_pi hk
   simpa [qaeGroverPlaneSuccessfulOutcomesK, paperQAEEstimate, theorem12ErrorBound_eq_expanded_QPE]
     using h
-theorem theorem12ErrorBound_eq_expanded_QPE (m k : ℕ) (a : ℝ) :
-    theorem12ErrorBound a (QPE.M m) k =
-      2 * Real.pi * (k : ℝ) * Real.sqrt (a * (1 - a)) / (QPE.M m : ℝ) +
-        (k : ℝ) ^ 2 * Real.pi ^ 2 / (QPE.M m : ℝ) ^ 2 := by
-  unfold theorem12ErrorBound phaseErrorRadius
-  have hMnat : QPE.M m ≠ 0 := ne_of_gt (Nat.two_pow_pos m)
-  have hM : ((QPE.M m : ℕ) : ℝ) ≠ 0 := by exact_mod_cast hMnat
-  field_simp [hM]
 
 /-- The paper QAE circuit satisfies the BHMT Theorem 12 success-probability
 bound for the actual amplitude `a = sin² θ`. -/
@@ -1865,8 +1880,8 @@ private theorem theorem12SuccessProbability_lt_one {k : ℕ} (hk : 1 < k) :
   have hden : 0 < 2 * ((k : ℝ) - 1) := by
     have : (1 : ℝ) < (k : ℝ) := by exact_mod_cast hk
     linarith
-  simp [hkne]
-  positivity
+  simp only [if_neg hkne]
+  exact sub_lt_self 1 (one_div_pos.mpr hden)
 
 theorem PaperTheorem12
     {m n k : ℕ} (A : Square (QPE.M n)) (f : Fin (QPE.M n) → Bool)
@@ -1976,13 +1991,14 @@ theorem PaperTheorem12
           (m := m) (n := n) (k := k) (A := A) (f := f)
           (ψ0 := paperBadState n A f theta) (ψ1 := paperGoodState n A f theta)
           (theta := theta) hA hinit hbad hgood hψ0 hψ1 htheta0 htheta_pi hk
-  have hStrict : theorem12SuccessProbability k <
+  have hStrict : 1 < k → theorem12SuccessProbability k <
       (Finset.univ.filter (fun y : Fin (QPE.M m) =>
         |paperQAEEstimate m y - amplitudeFromAngle theta| ≤
           2 * Real.pi * (k : ℝ) * Real.sqrt (amplitudeFromAngle theta *
             (1 - amplitudeFromAngle theta)) / (QPE.M m : ℝ) +
             (k : ℝ) ^ 2 * Real.pi ^ 2 / (QPE.M m : ℝ) ^ 2)).sum
         (fun y => paperQAEOutputProbability m n A f y) := by
+    intro hkgt
     by_cases ha0 : amplitudeFromAngle theta = 0
     · have hzero : paperGoodProbability n A f = 0 := by rw [hgoodProb, ha0]
       rcases paperQAEEndpointZero_of_goodProbability_zero
@@ -2052,14 +2068,14 @@ theorem PaperTheorem12
         exact paperQAESuccessProbabilityK_lt_expanded
           (m := m) (n := n) (k := k) (A := A) (f := f)
           (ψ0 := paperBadState n A f theta) (ψ1 := paperGoodState n A f theta)
-          (theta := theta) hA hinit hbad hgood hψ0 hψ1 htheta0 htheta_pi hk
+          (theta := theta) hA hinit hbad hgood hψ0 hψ1 htheta0 htheta_pi hkgt
   constructor
   · intro hk1
     simpa [theorem12SuccessProbability, hk1] using hSuccess
   constructor
   · intro hkgt
     have hk_ne : k ≠ 1 := by omega
-    simpa [theorem12SuccessProbability, hk_ne] using hStrict
+    simpa [theorem12SuccessProbability, hk_ne] using hStrict hkgt
   constructor
   · intro ha0
     have hzero : paperGoodProbability n A f = 0 := by rw [hgoodProb, ha0]
